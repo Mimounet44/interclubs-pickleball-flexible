@@ -1,0 +1,2558 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+    <title>Pickleball 40 | Tournoi Interclubs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #e8f5e9;
+            --surface: #f1f8e9;
+            --surface2: #ffffff;
+            --border: #c8e6c9;
+            --accent: #2e7d32;
+            --accent2: #1b5e20;
+            --accent-soft: rgba(46,125,50,0.08);
+            --gold: #f0c040;
+            --silver: #90a4ae;
+            --bronze: #e67e22;
+            --danger: #e05050;
+            --warning: #e8b040;
+            --text: #1b2e1f;
+            --text-muted: #4e6b4f;
+            --elite: #3949ab;
+            --consol: #d07840;
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        body {
+            background: var(--bg);
+            font-family: 'Poppins', sans-serif;
+            color: var(--text);
+            padding:16px 12px 90px;
+            min-height:100vh;
+        }
+        body::before {
+            content:'';
+            position:fixed; inset:0;
+            background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(46,125,50,0.08) 0%, transparent 70%);
+            pointer-events:none; z-index:0;
+        }
+        .container { max-width:1200px; margin:0 auto; position:relative; z-index:1; }
+
+        .top-bar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+        .logo { display:flex; align-items:center; gap:10px; }
+        .logo h1 { font-size:1.5rem; font-weight:800; letter-spacing:-0.03em; color:var(--text); }
+        .logo h1 span { color:var(--accent); }
+        .badge { background:var(--accent-soft); color:var(--accent); border:1px solid rgba(46,125,50,0.3); border-radius:40px; padding:3px 11px; font-size:0.68rem; font-weight:600; }
+        .stats { display:flex; gap:8px; }
+        .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:30px; padding:5px 14px; font-size:0.7rem; color:var(--text-muted); }
+        .stat-card b { color:var(--accent); }
+
+        .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.02);}
+        .panel-header { padding:12px 16px; border-bottom:1px solid var(--border); font-weight:700; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; color:var(--text); }
+        .panel-body { padding:16px; }
+
+        .flex-btns { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .btn { padding:7px 16px; border-radius:40px; border:none; font-family:'Poppins',sans-serif; font-weight:700; font-size:0.75rem; cursor:pointer; transition:all 0.2s; letter-spacing:0.02em; }
+        .btn-default { background:var(--surface2); color:var(--text-muted); border:1px solid var(--border); }
+        .btn-default:hover { border-color:var(--accent); color:var(--accent); }
+        .btn-primary { background:var(--accent); color:white; }
+        .btn-primary:hover { background:var(--accent2); transform:translateY(-1px); }
+        .btn-warning { background:var(--warning); color:#2c2c1c; }
+        .btn-warning:hover { filter:brightness(1.1); }
+        .btn-danger { background:rgba(224,80,80,0.15); color:var(--danger); border:1px solid rgba(224,80,80,0.3); }
+        .btn-danger:hover { background:rgba(224,80,80,0.25); }
+        label { color:var(--text-muted); font-size:0.75rem; display:flex; align-items:center; gap:6px; cursor:pointer; }
+        input[type="checkbox"] { accent-color:var(--accent); width:14px; height:14px; }
+        input[type="radio"] { accent-color:var(--accent); }
+        input[type="number"] { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:6px 10px; font-family:'Poppins',sans-serif; font-size:0.8rem; width:65px; }
+        input[type="number"]:focus { outline:none; border-color:var(--accent); }
+        input[type="email"], input[type="password"] {
+            background:var(--surface2); border:1px solid var(--border); color:var(--text);
+            border-radius:8px; padding:8px; font-family:'Poppins',sans-serif; font-size:0.8rem; width:100%;
+        }
+        input[type="email"]:focus, input[type="password"]:focus { outline:none; border-color:var(--accent); }
+
+        .tabs { display:flex; gap:4px; margin-bottom:16px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:40px; padding:4px; width:fit-content; }
+        .tab { background:transparent; border:none; padding:7px 16px; font-family:'Poppins',sans-serif; font-size:0.75rem; font-weight:700; cursor:pointer; border-radius:40px; color:var(--text-muted); transition:all 0.2s; letter-spacing:0.02em; }
+        .tab.active { background:var(--accent); color:white; }
+        .tab:hover:not(.active) { color:var(--text); background:var(--accent-soft);}
+        .tab-content { display:none; }
+        .tab-content.active { display:block; }
+
+        .grid-teams { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; }
+        .team-card { background:var(--surface2); border-radius:var(--radius-sm); padding:12px; border:1px solid var(--border); transition:border-color 0.2s; }
+        .team-card:hover { border-color:rgba(46,125,50,0.4); }
+        .team-title { font-weight:700; margin-bottom:8px; font-size:0.78rem; color:var(--accent); }
+        .team-input { width:100%; margin-bottom:7px; padding:7px 12px; border-radius:30px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'Poppins',sans-serif; font-size:0.72rem; transition:border-color 0.2s; }
+        .team-input:last-child { margin-bottom:0; }
+        .team-input:focus { outline:none; border-color:var(--accent); }
+
+        .groups-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+        .group-card { border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface2); overflow:hidden; }
+        .group-title { padding:8px 12px; background:var(--accent-soft); border-bottom:1px solid rgba(46,125,50,0.15); font-weight:800; font-size:0.8rem; color:var(--accent); }
+        .group-team-row { padding:6px 12px; display:flex; flex-direction:column; gap:1px; border-bottom:1px solid var(--border); }
+        .group-team-row:last-child { border-bottom:none; }
+        .group-team-club { font-weight:700; font-size:0.78rem; }
+        .group-team-players { font-size:0.65rem; color:var(--text-muted); }
+
+        .match-row { background:var(--bg); border-radius:var(--radius-sm); padding:8px 12px; margin-bottom:7px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; transition:border-color 0.2s, background 0.2s; }
+        .match-row.played { background:rgba(46,125,50,0.06); border-color:rgba(46,125,50,0.3); }
+        .match-teams { font-size:0.78rem; font-weight:600; display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+        .match-teams strong { color:var(--text); }
+        .match-teams .vs { color:var(--text-muted); font-size:0.68rem; margin:0 4px; }
+        .match-scores { display:flex; align-items:center; gap:6px; }
+        .score-sep { color:var(--text-muted); font-size:0.9rem; font-weight:700; }
+        .score-input { width:52px; text-align:center; border-radius:20px; border:1px solid var(--border); background:var(--surface2); color:var(--text); padding:5px 6px; font-family:'DM Mono',monospace; font-size:0.78rem; transition:border-color 0.2s; }
+        .score-input:focus { outline:none; border-color:var(--accent); }
+        .terrain-badge { display:flex; align-items:center; gap:5px; }
+        .terrain-label { font-size:0.65rem; color:var(--text-muted); }
+        .terrain-select { border-radius:20px; border:1px solid var(--border); background:var(--surface2); color:var(--text); padding:4px 8px; font-size:0.7rem; font-family:'Poppins',sans-serif; cursor:pointer; }
+        .terrain-select:focus { outline:none; border-color:var(--accent); }
+
+        .ranking-table { width:100%; border-collapse:collapse; font-size:0.72rem; }
+        .ranking-table th { padding:8px 6px; text-align:left; border-bottom:2px solid var(--border); color:var(--text-muted); font-weight:600; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.05em; }
+        .ranking-table td { padding:7px 6px; border-bottom:1px solid var(--border); }
+        .ranking-table tr:last-child td { border-bottom:none; }
+        .ranking-table tr:hover td { background:var(--surface2); }
+        .rank-num { font-weight:800; color:var(--text-muted); font-size:0.8rem; }
+        .rank-1 .rank-num { color:var(--gold); }
+        .rank-2 .rank-num { color:var(--silver); }
+        .rank-3 .rank-num { color:var(--bronze); }
+
+        .round-label { font-weight:800; margin:14px 0 8px; font-size:0.78rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.08em; display:flex; align-items:center; gap:8px; }
+        .round-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+        .phase-badge { display:inline-flex; align-items:center; gap:6px; border-radius:40px; padding:3px 12px; font-size:0.7rem; font-weight:700; margin-bottom:10px; }
+        .phase-badge.elite { background:rgba(57,73,171,0.1); color:var(--elite); border:1px solid rgba(57,73,171,0.3); }
+        .phase-badge.consol { background:rgba(208,120,64,0.1); color:var(--consol); border:1px solid rgba(208,120,64,0.3); }
+
+        .podium { display:flex; justify-content:center; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:28px; padding:20px 0; }
+        .podium-card { border-radius:var(--radius); padding:16px 20px; text-align:center; min-width:110px; background:var(--surface2); border:1px solid var(--border); }
+        .podium-card .medal { font-size:1.8rem; margin-bottom:6px; }
+        .podium-card .club-name { font-weight:800; font-size:0.85rem; margin-bottom:4px; }
+        .podium-card .pts { font-size:0.7rem; color:var(--text-muted); }
+        .podium-card .diff { font-size:0.6rem; color:var(--text-muted); }
+        .podium-card.gold { border-color:var(--gold); background:rgba(240,192,64,0.08); order:-1; transform:translateY(-8px); }
+        .podium-card.gold .club-name { color:var(--gold); font-weight:800; }
+        .podium-card.silver { border-color:var(--silver); }
+        .podium-card.bronze { border-color:var(--bronze); }
+
+        .notice { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:var(--accent); color:white; padding:8px 20px; border-radius:40px; font-size:0.72rem; font-weight:700; opacity:0; transition:opacity 0.2s; pointer-events:none; z-index:1100; white-space:nowrap; }
+        .notice.show { opacity:1; }
+
+        .floating-nav { position:fixed; bottom:20px; right:16px; display:flex; flex-direction:column; gap:8px; z-index:1000; }
+        .float-btn { background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:40px; padding:8px 16px; font-family:'Poppins',sans-serif; font-weight:700; box-shadow:0 4px 20px rgba(0,0,0,0.08); cursor:pointer; font-size:0.7rem; transition:all 0.2s; }
+        .float-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--surface2); }
+        .float-btn.special { background:var(--accent); color:white; border-color:var(--accent); }
+        .float-btn.special:hover { background:var(--accent2); }
+
+        .section-divider { height:1px; background:linear-gradient(to right, transparent, var(--border), transparent); margin:20px 0; }
+
+        .config-group { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); }
+        .config-group:last-child { border-bottom:none; padding-bottom:0; }
+        .config-label { font-size:0.75rem; color:var(--text-muted); font-weight:600; min-width:80px; }
+        .format-options { display:flex; gap:8px; flex-wrap:wrap; }
+        .format-option { display:flex; align-items:center; gap:5px; font-size:0.7rem; color:var(--text); cursor:pointer; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--surface2); transition:all 0.2s; }
+        .format-option:has(input:checked) { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+        .format-option input { display:none; }
+        .stats-recap { background:var(--surface2); border-radius:8px; padding:6px 12px; font-size:0.7rem; color:var(--text-muted); border-left:3px solid var(--accent); }
+
+        .schedule-card { background:var(--surface2); border-radius:var(--radius-sm); padding:10px; margin-bottom:8px; border:1px solid var(--border); }
+        .schedule-club { font-weight:800; color:var(--accent); cursor:pointer; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:5px; padding-bottom:6px; }
+        .schedule-club:hover .schedule-club-name { text-decoration:underline; }
+        .schedule-club-info { display:flex; flex-direction:column; gap:2px; }
+        .schedule-club-name { font-size:0.82rem; font-weight:800; }
+        .schedule-club-players { font-size:0.62rem; color:var(--text-muted); font-weight:400; padding-left:18px; }
+        .schedule-badge { font-size:0.65rem; background:var(--accent-soft); padding:2px 8px; border-radius:20px; white-space:nowrap; flex-shrink:0; color:var(--accent); font-weight:600; }
+        .schedule-matches { padding-left:12px; font-size:0.7rem; display:none; border-top:1px solid var(--border); padding-top:6px; margin-top:2px; }
+        .schedule-match { padding:4px 0; border-bottom:1px dashed var(--border); }
+        .schedule-match:last-child { border-bottom:none; }
+
+        .top-recap { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+        .recap-chip { background:var(--surface2); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:0.68rem; color:var(--text-muted); font-weight:600; }
+        .recap-config-btn { background:var(--surface2); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:0.68rem; color:var(--text-muted); cursor:pointer; font-weight:600; }
+        .recap-config-btn:hover { border-color:var(--accent); color:var(--accent); }
+
+        .firebase-status {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .firebase-status.connected { color: var(--accent); border-color: var(--accent); }
+        .firebase-status.disconnected { color: var(--danger); border-color: var(--danger); }
+        .firebase-status.auth { color: var(--elite); border-color: var(--elite); }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal {
+            background: var(--surface2);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            animation: modalFadeIn 0.2s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal-header {
+            margin-bottom: 16px;
+            color: var(--text);
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+        .modal-body {
+            margin-bottom: 20px;
+        }
+        .modal-footer {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .auth-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .user-badge {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border: 1px solid rgba(46, 125, 50, 0.3);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .locked-icon {
+            color: var(--danger);
+            font-size: 0.9rem;
+        }
+
+        @media print {
+            body { padding:0; background:white; }
+            body::before { display:none; }
+            .floating-nav, .tabs, .panel:not(#schedulePrintPanel), .notice, .firebase-status, .modal-overlay { display:none !important; }
+            #scheduleTab { display:block !important; }
+            .tab-content:not(#scheduleTab) { display:none !important; }
+            .schedule-matches { display:block !important; }
+            .schedule-card { break-inside:avoid; border:1px solid #ccc; margin-bottom:6px; }
+            .schedule-club { cursor:default; }
+            .schedule-badge { display:none; }
+            .panel { border:none; box-shadow:none; }
+            .panel-header { border-bottom:2px solid #2e7d32; font-size:1rem; }
+            @page { margin:1.5cm; }
+        }
+
+        /* ── Horaires ── */
+        input[type="time"] { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:5px 8px; font-family:'DM Mono',monospace; font-size:0.75rem; width:90px; }
+        input[type="time"]:focus { outline:none; border-color:var(--accent); }
+        .time-badge { display:flex; align-items:center; gap:5px; }
+        .time-label { font-size:0.65rem; color:var(--text-muted); }
+        .time-display { font-family:'DM Mono',monospace; font-size:0.72rem; font-weight:600; color:var(--accent); background:var(--accent-soft); border:1px solid rgba(46,125,50,0.25); border-radius:20px; padding:3px 9px; white-space:nowrap; }
+        /* planning terrain */
+        .terrain-timeline { margin-bottom:12px; }
+        .terrain-row { display:flex; align-items:stretch; gap:0; margin-bottom:4px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+        .terrain-row-label { background:var(--accent); color:white; font-weight:800; font-size:0.7rem; padding:6px 10px; display:flex; align-items:center; min-width:72px; white-space:nowrap; }
+        .terrain-slots { display:flex; flex-wrap:wrap; gap:2px; padding:4px; background:var(--surface2); flex:1; }
+        .terrain-slot { border-radius:6px; padding:4px 8px; font-size:0.62rem; display:flex; flex-direction:column; gap:1px; border:1px solid transparent; min-width:110px; }
+        .terrain-slot.phase1 { background:rgba(46,125,50,0.08); border-color:rgba(46,125,50,0.2); }
+        .terrain-slot.phase2-elite { background:rgba(57,73,171,0.08); border-color:rgba(57,73,171,0.2); }
+        .terrain-slot.phase2-consol { background:rgba(208,120,64,0.08); border-color:rgba(208,120,64,0.2); }
+        .slot-time { font-family:'DM Mono',monospace; font-weight:700; font-size:0.65rem; }
+        .slot-teams { color:var(--text-muted); font-size:0.6rem; }
+        .slot-group { font-weight:700; font-size:0.6rem; }
+
+        /* Print also show planning */
+        @media print {
+            #planningTab { display:block !important; }
+        }
+        @media (max-width:600px) {
+            .match-row { flex-direction:column; align-items:flex-start; }
+            .score-input { width:60px; }
+            .tabs { width:100%; justify-content:flex-start; }
+            .match-teams { flex-direction:column; align-items:flex-start; }
+            .format-option { font-size:0.65rem; padding:3px 8px; }
+            .terrain-slots { min-width:0; }
+            .modal { width: 95%; margin: 10px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- ══ TOP BAR ══ -->
+    <div class="top-bar">
+        <div class="logo">
+            <h1>🥒 PICKLE<span>BALL</span> 40</h1>
+            <div class="badge">Interclubs · 3-2-0</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <div class="stats">
+                <div class="stat-card">P1 : <b><span id="p1Done">0</span>/<span id="p1Total">0</span></b></div>
+                <div class="stat-card">P2 : <b><span id="p2Done">0</span>/<span id="p2Total">0</span></b></div>
+            </div>
+            <div class="auth-info">
+                <span id="authStatus">Non connecté</span>
+                <span class="locked-icon" id="writeLockIcon" title="Seuls les organisateurs connectés peuvent modifier les données">🔒</span>
+            </div>
+            <button id="loginBtn" class="btn btn-primary" onclick="showLoginModal()" style="font-size:0.7rem; padding:5px 10px;">🔑 Se connecter</button>
+            <button id="logoutBtn" class="btn btn-danger" onclick="logout()" style="font-size:0.7rem; padding:5px 10px; display:none;">🚪 Déconnexion</button>
+        </div>
+    </div>
+
+    <!-- ══ BANDEAU RÉCAP ══ -->
+    <div id="topRecap" class="top-recap">
+        <span id="recapFormat" class="recap-chip">Format A</span>
+        <span id="recapTerrains" class="recap-chip">6 terrains</span>
+        <span id="recapP1Time" class="recap-chip">🌅 P1 09:00 · 30min</span>
+        <span id="recapLunch" class="recap-chip">🍽️ 12:30 (90min)</span>
+        <span id="recapP2Time" class="recap-chip">☀️ P2 14:00 · 30min</span>
+        <span id="recapStats" class="recap-chip"></span>
+        <button class="recap-config-btn" onclick="switchTab('config')">⚙️ Config</button>
+    </div>
+
+    <!-- ══ ONGLETS ══ -->
+    <div class="tabs">
+        <button class="tab" data-tab="config">⚙️ Config</button>
+        <button class="tab active" data-tab="teams">🏷️ Équipes</button>
+        <button class="tab" data-tab="phase1">🏐 Phase 1</button>
+        <button class="tab" data-tab="rankingP1">📊 Class. P1</button>
+        <button class="tab" data-tab="phase2">🏆 Phase 2</button>
+        <button class="tab" data-tab="ranking">🥇 Final</button>
+        <button class="tab" data-tab="schedule">📅 Programme</button>
+        <button class="tab" data-tab="planning">🗓️ Planning</button>
+        <button class="tab" data-tab="reglement">📖 Règlement</button>
+    </div>
+
+    <!-- ══ CONFIG ══ -->
+    <div id="configTab" class="tab-content">
+        <div class="panel">
+            <div class="panel-header">⚙️ Format & Terrains</div>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:10px;">
+                <div class="config-group">
+                    <span class="config-label">Format :</span>
+                    <div class="format-options">
+                        <label class="format-option"><input type="radio" name="format" value="A" checked> A : P1=10×4 | P2=10×4 | 6 matchs/club</label>
+                        <label class="format-option"><input type="radio" name="format" value="B"> B : P1=10×4 | P2=8×5 | 7 matchs/club</label>
+                        <label class="format-option"><input type="radio" name="format" value="C"> C : P1=8×5 | P2=10×4 | 7 matchs/club</label>
+                        <label class="format-option"><input type="radio" name="format" value="D"> D : P1=8×5 | P2=8×5 | 8 matchs/club</label>
+                    </div>
+                </div>
+                <div class="config-group">
+                    <span class="config-label">Options :</span>
+                    <label><input type="checkbox" id="randomDrawCheck" checked> 🎲 Éviter même club dans un groupe</label>
+                    <label style="margin-left:16px;">Terrains (3–10) : <input type="number" id="nbTerrains" min="3" max="10" value="6" style="width:55px;"></label>
+                </div>
+                <div class="config-group">
+                    <span class="config-label">Récap :</span>
+                    <div class="stats-recap" id="statsRecap"></div>
+                </div>
+                <div class="config-group" style="border-bottom:none;padding-bottom:0;">
+                    <span class="config-label">Actions :</span>
+                    <div class="flex-btns">
+                        <button class="btn btn-primary" id="drawBtn">🎲 Tirage P1</button>
+                        <button class="btn btn-primary" id="genP1Btn">📋 Générer matchs P1</button>
+                        <button class="btn btn-warning" id="genP2Btn">🏅 Générer matchs P2</button>
+                        <button class="btn btn-danger" id="resetBtn">🗑️ Reset complet</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">🕐 Horaires du Tournoi
+                <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);">P1 matin · Déjeuner · P2 après-midi · Rotation libre des terrains</span>
+            </div>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:12px;">
+                <div class="config-group">
+                    <span class="config-label">🌅 Phase 1 :</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;">
+                        <label>Début <input type="time" id="startTimeP1" value="09:00"></label>
+                        <label>Durée match <input type="number" id="durationP1" min="10" max="120" value="30" style="width:58px;"> min</label>
+                        <label>Transition <input type="number" id="breakP1" min="0" max="30" value="5" style="width:50px;"> min</label>
+                    </div>
+                </div>
+                <div class="config-group">
+                    <span class="config-label">🍽️ Déjeuner :</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;">
+                        <label>Début pause <input type="time" id="lunchStart" value="12:30"></label>
+                        <label>Durée <input type="number" id="lunchDuration" min="15" max="180" value="90" style="width:58px;"> min</label>
+                        <span style="font-size:0.68rem;color:var(--text-muted);">(P2 démarre automatiquement après)</span>
+                    </div>
+                </div>
+                <div class="config-group" style="border-bottom:none;padding-bottom:0;">
+                    <span class="config-label">☀️ Phase 2 :</span>
+                    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;">
+                        <label>Durée match <input type="number" id="durationP2" min="10" max="120" value="30" style="width:58px;"> min</label>
+                        <label>Transition <input type="number" id="breakP2" min="0" max="30" value="5" style="width:50px;"> min</label>
+                        <button class="btn btn-primary" id="genHorairesBtn">⏱️ Générer les horaires</button>
+                    </div>
+                </div>
+                <div id="horairesInfo" style="font-size:0.72rem;color:var(--accent);font-weight:600;background:var(--accent-soft);padding:6px 12px;border-radius:8px;display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ ÉQUIPES ══ -->
+    <div id="teamsTab" class="tab-content active">
+        <div class="panel">
+            <div class="panel-header">✏️ Clubs &amp; Joueurs</div>
+            <div class="panel-body"><div id="teamsContainer" class="grid-teams"></div></div>
+        </div>
+        <div class="panel">
+            <div class="panel-header">📌 Groupes Phase 1</div>
+            <div class="panel-body"><div id="groupsPreview"></div></div>
+        </div>
+    </div>
+
+    <div id="phase1Tab" class="tab-content"><div id="phase1Area"></div></div>
+    <div id="rankingP1Tab" class="tab-content"><div id="rankingP1Area"></div></div>
+    <div id="phase2Tab" class="tab-content"><div id="phase2Area"></div></div>
+    <div id="rankingTab" class="tab-content"><div id="rankingArea"></div></div>
+    <div id="scheduleTab" class="tab-content"><div id="scheduleArea"></div></div>
+    <div id="planningTab" class="tab-content"><div id="planningArea"></div></div>
+    <div id="reglementTab" class="tab-content"><div id="reglementArea"></div></div>
+</div>
+
+<!-- Modal de connexion -->
+<div id="loginModal" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-header">🔑 Connexion Organisateur</div>
+        <div class="modal-body">
+            <div style="margin-bottom:16px;">
+                <label style="display:block; margin-bottom:6px; color:var(--text-muted); font-size:0.8rem;">Email</label>
+                <input type="email" id="loginEmail" placeholder="organisateur@example.com">
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="display:block; margin-bottom:6px; color:var(--text-muted); font-size:0.8rem;">Mot de passe</label>
+                <input type="password" id="loginPassword" placeholder="••••••••">
+            </div>
+            <div id="loginError" style="color:var(--danger); font-size:0.75rem; margin-bottom:16px; display:none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-default" onclick="hideLoginModal()">Annuler</button>
+            <button class="btn btn-primary" onclick="attemptLogin()">Se connecter</button>
+        </div>
+    </div>
+</div>
+
+<div class="floating-nav" id="floatingNav">
+    <button class="float-btn" id="scrollTopBtn">⬆ Haut</button>
+    <button class="float-btn special" id="scrollEliteBtn" style="display:none;">🏅 Élite</button>
+    <button class="float-btn special" id="scrollConsolBtn" style="display:none;">🎗️ Consolation</button>
+    <button class="float-btn" id="printBtn" style="display:none;">🖨️ Imprimer</button>
+</div>
+<div id="notice" class="notice"></div>
+<div id="firebaseStatus" class="firebase-status">⚪ Connecting to Firebase...</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+
+<script>
+    // =============================================
+    // CONFIGURATION FIREBASE
+    // =============================================
+    const firebaseConfig = {
+        apiKey: "AIzaSyCuOP-EwHzOo1p-WeNu0gQbWyv97kA6T5M",
+        authDomain: "pickleball-clean.firebaseapp.com",
+        databaseURL: "https://pickleball-clean.firebaseio.com",
+        projectId: "pickleball-clean",
+        storageBucket: "pickleball-clean.firebasestorage.app",
+        messagingSenderId: "1095429902544",
+        appId: "1:1095429902544:web:dc4aa9070a0d654f480ed5"
+    };
+
+    // Initialiser Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    // Variables globales pour l'état
+    let firebaseConnected = false;
+    let currentUser = null;
+    let firebaseListener = null;
+    let authListener = null;
+
+    // =============================================
+    // GESTION DE L'AUTHENTIFICATION
+    // =============================================
+
+    // Écouter les changements d'état de connexion
+    auth.onAuthStateChanged((user) => {
+        currentUser = user;
+        updateAuthUI();
+
+        if (user) {
+            showMsg(`Connecté en tant que ${user.email}`);
+            updateFirebaseStatus(firebaseConnected && currentUser);
+            // Recharger les données pour s'assurer qu'on a les dernières modifications
+            if (firebaseConnected) loadDataFromFirebase();
+        } else {
+            showMsg("Déconnecté");
+            updateFirebaseStatus(firebaseConnected && currentUser);
+        }
+    });
+
+    // Mettre à jour l'UI en fonction de l'état de connexion
+    function updateAuthUI() {
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const authStatus = document.getElementById('authStatus');
+        const writeLockIcon = document.getElementById('writeLockIcon');
+
+        if (currentUser) {
+            loginBtn.style.display = 'none';
+            logoutBtn.style.display = 'block';
+            authStatus.textContent = currentUser.email;
+            writeLockIcon.style.display = 'none';
+            document.getElementById('firebaseStatus').className = 'firebase-status auth';
+        } else {
+            loginBtn.style.display = 'block';
+            logoutBtn.style.display = 'none';
+            authStatus.textContent = "Non connecté";
+            writeLockIcon.style.display = 'inline';
+            document.getElementById('firebaseStatus').className = firebaseConnected ? 'firebase-status connected' : 'firebase-status disconnected';
+        }
+    }
+
+    // Connexion avec email/mot de passe
+    function login(email, password) {
+        return auth.signInWithEmailAndPassword(email, password);
+    }
+
+    // Déconnexion
+    function logout() {
+        auth.signOut()
+            .then(() => {
+                showMsg("Déconnecté");
+            })
+            .catch((error) => {
+                showMsg(`Erreur: ${error.message}`);
+            });
+    }
+
+    // Afficher la modale de connexion
+    function showLoginModal() {
+        document.getElementById('loginModal').classList.add('active');
+        document.getElementById('loginEmail').focus();
+        document.getElementById('loginError').style.display = 'none';
+    }
+
+    // Masquer la modale de connexion
+    function hideLoginModal() {
+        document.getElementById('loginModal').classList.remove('active');
+        document.getElementById('loginEmail').value = '';
+        document.getElementById('loginPassword').value = '';
+    }
+
+    // Tentative de connexion
+    function attemptLogin() {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const errorEl = document.getElementById('loginError');
+
+        if (!email || !password) {
+            errorEl.textContent = "Veuillez remplir tous les champs";
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        login(email, password)
+            .then(() => {
+                hideLoginModal();
+            })
+            .catch((error) => {
+                errorEl.textContent = error.message;
+                errorEl.style.display = 'block';
+            });
+    }
+
+    // Fermer la modale en cliquant à l'extérieur
+    document.getElementById('loginModal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('loginModal')) {
+            hideLoginModal();
+        }
+    });
+
+    // Mettre à jour l'affichage du statut Firebase
+    function updateFirebaseStatus(connected) {
+        const statusEl = document.getElementById('firebaseStatus');
+        if (connected && currentUser) {
+            statusEl.textContent = "🟢 Connecté à Firebase (Auth)";
+            statusEl.className = "firebase-status auth";
+        } else if (connected) {
+            statusEl.textContent = "🟢 Connected to Firebase";
+            statusEl.className = "firebase-status connected";
+        } else {
+            statusEl.textContent = "🔴 Offline (Local Mode)";
+            statusEl.className = "firebase-status disconnected";
+        }
+    }
+
+    // =============================================
+    // DONNÉES GLOBALES
+    // =============================================
+    let teams = [];
+    let groupsP1 = [];
+    let matchesP1 = [];
+    let matchesP2 = [];
+    let nbTerrains = 6;
+    let randomMode = true;
+    let currentFormat = "A";
+    let timeSettings = {
+        startP1: '09:00',
+        durationP1: 30,
+        breakP1: 5,
+        lunchStart: '12:30',
+        lunchDuration: 90,
+        durationP2: 30,
+        breakP2: 5
+    };
+    const GROUP_NAMES_10 = ['A','B','C','D','E','F','G','H','I','J'];
+    const GROUP_NAMES_8 = ['A','B','C','D','E','F','G','H'];
+
+    // =============================================
+    // FONCTIONS UTILITAIRES
+    // =============================================
+    function esc(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, m => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[m]));
+    }
+
+    function showMsg(msg) {
+        let el = document.getElementById('notice');
+        el.innerText = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 2500);
+    }
+
+    function getScore(v) {
+        let n = parseInt(v);
+        return isNaN(n) ? NaN : n;
+    }
+
+    function isPlayed(m) {
+        let s1 = getScore(m.score1), s2 = getScore(m.score2);
+        return !isNaN(s1) && !isNaN(s2);
+    }
+
+    function updateCounters() {
+        document.getElementById('p1Done').innerText = matchesP1.filter(isPlayed).length;
+        document.getElementById('p1Total').innerText = matchesP1.length;
+        document.getElementById('p2Done').innerText = matchesP2.filter(isPlayed).length;
+        document.getElementById('p2Total').innerText = matchesP2.length;
+    }
+
+    function timeToMin(t) {
+        let [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    }
+
+    function minToTime(m) {
+        let h = Math.floor(m / 60) % 24, mn = m % 60;
+        return String(h).padStart(2, '0') + ':' + String(mn).padStart(2, '0');
+    }
+
+    function readTimeSettings() {
+        timeSettings.startP1 = document.getElementById('startTimeP1').value || '09:00';
+        timeSettings.durationP1 = Math.max(10, parseInt(document.getElementById('durationP1').value) || 30);
+        timeSettings.breakP1 = Math.max(0, parseInt(document.getElementById('breakP1').value) || 0);
+        timeSettings.lunchStart = document.getElementById('lunchStart').value || '12:30';
+        timeSettings.lunchDuration = Math.max(15, parseInt(document.getElementById('lunchDuration').value) || 90);
+        timeSettings.durationP2 = Math.max(10, parseInt(document.getElementById('durationP2').value) || 30);
+        timeSettings.breakP2 = Math.max(0, parseInt(document.getElementById('breakP2').value) || 0);
+        timeSettings.startP2 = minToTime(timeToMin(timeSettings.lunchStart) + timeSettings.lunchDuration);
+    }
+
+    function applyTimeSettings() {
+        document.getElementById('startTimeP1').value = timeSettings.startP1;
+        document.getElementById('durationP1').value = timeSettings.durationP1;
+        document.getElementById('breakP1').value = timeSettings.breakP1;
+        document.getElementById('lunchStart').value = timeSettings.lunchStart || '12:30';
+        document.getElementById('lunchDuration').value = timeSettings.lunchDuration || 90;
+        document.getElementById('durationP2').value = timeSettings.durationP2;
+        document.getElementById('breakP2').value = timeSettings.breakP2;
+    }
+
+    function updateTopRecap() {
+        document.getElementById('recapFormat').textContent = `Format ${currentFormat}`;
+        document.getElementById('recapTerrains').textContent = `${nbTerrains} terrains`;
+        document.getElementById('recapP1Time').textContent = `🌅 P1 ${timeSettings.startP1} · ${timeSettings.durationP1}min`;
+        document.getElementById('recapLunch').textContent = `🍽️ ${timeSettings.lunchStart} (${timeSettings.lunchDuration}min)`;
+        document.getElementById('recapP2Time').textContent = `☀️ P2 ${timeSettings.startP2} · ${timeSettings.durationP2}min`;
+    }
+
+    // =============================================
+    // GESTION DES DONNÉES (FIREBASE + LOCALSTORAGE)
+    // =============================================
+    function getDataSnapshot() {
+        return {
+            teams,
+            groupsP1,
+            matchesP1,
+            matchesP2,
+            nbTerrains,
+            randomMode,
+            currentFormat,
+            timeSettings
+        };
+    }
+
+    function applyDataSnapshot(data) {
+        if (!data) return;
+
+        teams = data.teams || [];
+        groupsP1 = data.groupsP1 || [];
+        matchesP1 = data.matchesP1 || [];
+        matchesP2 = data.matchesP2 || [];
+        nbTerrains = data.nbTerrains || 6;
+        randomMode = data.randomMode !== undefined ? data.randomMode : true;
+        currentFormat = data.currentFormat || "A";
+        timeSettings = data.timeSettings || {
+            startP1: '09:00',
+            durationP1: 30,
+            breakP1: 5,
+            lunchStart: '12:30',
+            lunchDuration: 90,
+            durationP2: 30,
+            breakP2: 5
+        };
+
+        // Mettre à jour l'UI
+        document.querySelector(`input[name="format"][value="${currentFormat}"]`).checked = true;
+        document.getElementById('nbTerrains').value = nbTerrains;
+        document.getElementById('randomDrawCheck').checked = randomMode;
+        applyTimeSettings();
+        updateTopRecap();
+        updateStatsRecap();
+
+        renderTeamsEditor();
+        renderGroupsPreview();
+        if (matchesP1.length) {
+            renderPhase1UI();
+            renderRankingP1();
+        }
+        if (matchesP2.length) {
+            renderPhase2UI();
+        }
+        updateGlobalRanking();
+        updateCounters();
+        renderSchedule();
+        renderPlanning();
+    }
+
+    function saveDataToFirebase() {
+        if (!firebaseConnected || !currentUser) {
+            saveDataToLocalStorage();
+            showMsg("Non connecté - Sauvegarde locale uniquement");
+            return;
+        }
+
+        const data = getDataSnapshot();
+        firebase.database().ref('tournoi').set(data)
+            .then(() => {
+                saveDataToLocalStorage(); // Sauvegarder aussi en local pour le fallback
+            })
+            .catch((error) => {
+                console.error("Erreur Firebase:", error);
+                saveDataToLocalStorage();
+                showMsg("Erreur Firebase - Sauvegarde locale");
+            });
+    }
+
+    function saveDataToLocalStorage() {
+        const data = getDataSnapshot();
+        localStorage.setItem('pickle40_final', JSON.stringify(data));
+    }
+
+    function loadDataFromFirebase() {
+        if (firebaseListener) {
+            firebase.database().ref('tournoi').off('value', firebaseListener);
+        }
+
+        firebaseListener = firebase.database().ref('tournoi').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                applyDataSnapshot(data);
+                updateFirebaseStatus(firebaseConnected && currentUser);
+            } else {
+                // Si Firebase est vide, essayer de charger depuis localStorage
+                loadDataFromLocalStorage();
+            }
+        }, (error) => {
+            console.error("Erreur Firebase:", error);
+            loadDataFromLocalStorage();
+            updateFirebaseStatus(false);
+        });
+    }
+
+    function loadDataFromLocalStorage() {
+        const raw = localStorage.getItem('pickle40_final');
+        if (raw) {
+            try {
+                const data = JSON.parse(raw);
+                applyDataSnapshot(data);
+            } catch (e) {
+                console.error("Erreur chargement localStorage:", e);
+            }
+        }
+        updateFirebaseStatus(firebaseConnected && currentUser);
+    }
+
+    function saveData() {
+        if (currentUser) {
+            saveDataToFirebase();
+        } else {
+            saveDataToLocalStorage();
+            showMsg("Connectez-vous pour synchroniser avec Firebase");
+        }
+    }
+
+    function loadData() {
+        // Vérifier d'abord si Firebase est disponible
+        firebase.database().ref('.info/connected').on('value', (snapshot) => {
+            firebaseConnected = snapshot.val() === true;
+            updateFirebaseStatus(firebaseConnected && currentUser);
+
+            if (firebaseConnected) {
+                loadDataFromFirebase();
+            } else {
+                loadDataFromLocalStorage();
+            }
+        });
+    }
+
+    // =============================================
+    // FONCTIONS DE RENDU
+    // =============================================
+    function updateStatsRecap() {
+        let nbMatchsP1 = 0, nbMatchsP2 = 0, matchsParClub = 0;
+
+        if (currentFormat === "A") {
+            nbMatchsP1 = 10 * 6;
+            nbMatchsP2 = 10 * 6;
+            matchsParClub = 6;
+        } else if (currentFormat === "B") {
+            nbMatchsP1 = 10 * 6;
+            nbMatchsP2 = 8 * 10;
+            matchsParClub = 7;
+        } else if (currentFormat === "C") {
+            nbMatchsP1 = 8 * 10;
+            nbMatchsP2 = 10 * 6;
+            matchsParClub = 7;
+        } else if (currentFormat === "D") {
+            nbMatchsP1 = 8 * 10;
+            nbMatchsP2 = 8 * 10;
+            matchsParClub = 8;
+        }
+
+        document.getElementById('statsRecap').innerHTML =
+            `📊 ${teams.length} clubs · P1: ${nbMatchsP1} matchs · P2: ${nbMatchsP2} matchs · Total: ${nbMatchsP1 + nbMatchsP2} matchs · ${matchsParClub} matchs/club`;
+    }
+
+    function initTeams() {
+        teams = [];
+        for (let i = 1; i <= 40; i++) {
+            teams.push({
+                id: i,
+                club: `Club ${i}`,
+                player1: `Joueur ${2 * i - 1}`,
+                player2: `Joueur ${2 * i}`
+            });
+        }
+        renderTeamsEditor();
+        updateStatsRecap();
+    }
+
+    function setupAutoClear(input, defaultValue) {
+        let isDefault = (input.value === defaultValue);
+        input.addEventListener('focus', function() {
+            if (isDefault && this.value === defaultValue) {
+                this.value = '';
+                isDefault = false;
+            }
+        });
+        input.addEventListener('blur', function() {
+            if (this.value.trim() === '') {
+                this.value = defaultValue;
+                isDefault = true;
+            }
+        });
+    }
+
+    function renderTeamsEditor() {
+        let html = '';
+        teams.forEach(t => {
+            let defaultClub = `Club ${t.id}`;
+            let defaultP1 = `Joueur ${2 * t.id - 1}`;
+            let defaultP2 = `Joueur ${2 * t.id}`;
+            html += `<div class="team-card">
+              <div class="team-title">#${t.id}</div>
+              <input class="team-input" type="text" data-id="${t.id}" data-field="club" value="${esc(t.club)}" data-default="${esc(defaultClub)}" placeholder="Club">
+              <input class="team-input" type="text" data-id="${t.id}" data-field="p1" value="${esc(t.player1)}" data-default="${esc(defaultP1)}" placeholder="Joueur 1">
+              <input class="team-input" type="text" data-id="${t.id}" data-field="p2" value="${esc(t.player2)}" data-default="${esc(defaultP2)}" placeholder="Joueur 2">
+            </div>`;
+        });
+        document.getElementById('teamsContainer').innerHTML = html;
+        document.querySelectorAll('#teamsContainer .team-input').forEach(inp => {
+            let def = inp.getAttribute('data-default');
+            setupAutoClear(inp, def);
+            inp.addEventListener('change', function() {
+                let tid = parseInt(this.dataset.id);
+                let team = teams.find(t => t.id === tid);
+                if (team) {
+                    let val = this.value.trim();
+                    if (val === '') val = this.getAttribute('data-default');
+                    if (this.dataset.field === 'club') team.club = val;
+                    else if (this.dataset.field === 'p1') team.player1 = val;
+                    else if (this.dataset.field === 'p2') team.player2 = val;
+                }
+                renderTeamsEditor();
+                if (groupsP1.length) renderGroupsPreview();
+                saveData();
+            });
+        });
+    }
+
+    function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            let j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function drawGroupsAvoidSameClub(nbGroups, teamsPerGroup) {
+        let shuffled = shuffleArray([...teams]);
+        let groupsTemp = Array.from({ length: nbGroups }, () => []);
+        for (let team of shuffled) {
+            let placed = false;
+            for (let g = 0; g < nbGroups; g++) {
+                if (groupsTemp[g].length < teamsPerGroup && !groupsTemp[g].some(t => t.club === team.club)) {
+                    groupsTemp[g].push(team);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                for (let g = 0; g < nbGroups; g++) {
+                    if (groupsTemp[g].length < teamsPerGroup) {
+                        groupsTemp[g].push(team);
+                        break;
+                    }
+                }
+            }
+        }
+        let groupNames = (nbGroups === 10) ? GROUP_NAMES_10 : GROUP_NAMES_8;
+        return groupsTemp.map((g, i) => ({ name: groupNames[i], teams: g }));
+    }
+
+    function drawOrdered() {
+        let sorted = [...teams].sort((a, b) => a.id - b.id);
+        let nbGroups = (currentFormat === "C" || currentFormat === "D") ? 8 : 10;
+        let teamsPerGroup = (currentFormat === "C" || currentFormat === "D") ? 5 : 4;
+        let groupNames = (nbGroups === 10) ? GROUP_NAMES_10 : GROUP_NAMES_8;
+        let groups = [];
+        for (let i = 0; i < nbGroups; i++) {
+            groups.push({
+                name: groupNames[i],
+                teams: sorted.slice(i * teamsPerGroup, (i + 1) * teamsPerGroup)
+            });
+        }
+        return groups;
+    }
+
+    function doTirage() {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les données");
+            return;
+        }
+
+        let nbGroups = (currentFormat === "C" || currentFormat === "D") ? 8 : 10;
+        let teamsPerGroup = (currentFormat === "C" || currentFormat === "D") ? 5 : 4;
+        if (randomMode) groupsP1 = drawGroupsAvoidSameClub(nbGroups, teamsPerGroup);
+        else groupsP1 = drawOrdered();
+        matchesP1 = [];
+        matchesP2 = [];
+        renderGroupsPreview();
+        showMsg(`Tirage P1 : ${nbGroups} groupes de ${teamsPerGroup}`);
+        saveData();
+        if (document.querySelector('.tab.active').dataset.tab === 'phase1') renderPhase1UI();
+        if (document.querySelector('.tab.active').dataset.tab === 'phase2') renderPhase2UI();
+        renderRankingP1();
+        updateGlobalRanking();
+        renderSchedule();
+    }
+
+    function renderGroupsPreview() {
+        let container = document.getElementById('groupsPreview');
+        if (!groupsP1.length) {
+            container.innerHTML = '<em style="color:var(--text-muted);font-size:0.8rem;">Cliquez sur "Tirage P1" pour générer les groupes.</em>';
+            return;
+        }
+        let html = '<div class="groups-grid">';
+        groupsP1.forEach(g => {
+            html += `<div class="group-card"><div class="group-title">Groupe ${g.name}</div>`;
+            g.teams.forEach(t => {
+                html += `<div class="group-team-row"><div class="group-team-club">🏷️ ${esc(t.club)}</div><div class="group-team-players">${esc(t.player1)} · ${esc(t.player2)}</div></div>`;
+            });
+            html += `</div>`;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    function generateBalancedMatches(teamsList, groupName, startId, groupIndex) {
+        let n = teamsList.length;
+        let matches = [];
+        let id = startId;
+        let baseTerrain = (groupIndex % nbTerrains) + 1;
+        let indices = [...Array(n).keys()];
+        if (n % 2 === 1) indices.push(-1);
+        let rounds = indices.length - 1;
+        for (let round = 0; round < rounds; round++) {
+            for (let i = 0; i < indices.length / 2; i++) {
+                let a = indices[i];
+                let b = indices[indices.length - 1 - i];
+                if (a !== -1 && b !== -1) {
+                    matches.push({
+                        id: id++,
+                        group: groupName,
+                        team1: teamsList[a],
+                        team2: teamsList[b],
+                        score1: '',
+                        score2: '',
+                        terrain: baseTerrain
+                    });
+                }
+            }
+            indices.splice(1, 0, indices.pop());
+        }
+        return { matches, nextId: id };
+    }
+
+    function genPhase1() {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les données");
+            return;
+        }
+
+        if (!groupsP1.length) {
+            showMsg("D'abord faire le tirage P1");
+            return;
+        }
+        matchesP1 = [];
+        matchesP2 = [];
+        let nextId = 1;
+        for (let idx = 0; idx < groupsP1.length; idx++) {
+            let grp = groupsP1[idx];
+            let res = generateBalancedMatches(grp.teams, grp.name, nextId, idx);
+            matchesP1.push(...res.matches);
+            nextId = res.nextId;
+        }
+        renderPhase1UI();
+        renderRankingP1();
+        renderSchedule();
+        updateCounters();
+        saveData();
+        showMsg(`${matchesP1.length} matchs Phase 1 générés (${groupsP1.length} groupes)`);
+        updateStatsRecap();
+    }
+
+    function computeRankP1(groupName) {
+        let grp = groupsP1.find(g => g.name === groupName);
+        if (!grp) return [];
+        let stats = grp.teams.map(t => ({
+            team: t,
+            pts: 0,
+            w: 0,
+            d: 0,
+            l: 0,
+            bp: 0,
+            bc: 0,
+            diff: 0
+        }));
+        matchesP1.filter(m => m.group === groupName).forEach(m => {
+            if (!isPlayed(m)) return;
+            let s1 = getScore(m.score1), s2 = getScore(m.score2);
+            let t1 = stats.find(s => s.team.id === m.team1.id);
+            let t2 = stats.find(s => s.team.id === m.team2.id);
+            if (!t1 || !t2) return;
+            t1.bp += s1;
+            t1.bc += s2;
+            t2.bp += s2;
+            t2.bc += s1;
+            if (s1 > s2) {
+                t1.w++;
+                t2.l++;
+                t1.pts += 3;
+            } else if (s2 > s1) {
+                t2.w++;
+                t1.l++;
+                t2.pts += 3;
+            } else {
+                t1.d++;
+                t2.d++;
+                t1.pts += 2;
+                t2.pts += 2;
+            }
+        });
+        stats.forEach(s => s.diff = s.bp - s.bc);
+        stats.sort((a, b) => b.pts - a.pts || b.diff - a.diff || b.bp - a.bp || b.w - a.w);
+        return stats;
+    }
+
+    function updateTerrain(matchId, phase, newVal) {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les données");
+            return;
+        }
+
+        let match;
+        if (phase === 1) match = matchesP1.find(m => m.id === matchId);
+        else match = matchesP2.find(m => m.id === matchId);
+        if (match) {
+            match.terrain = parseInt(newVal);
+            saveData();
+            if (phase === 1) renderPhase1UI();
+            else renderPhase2UI();
+            renderSchedule();
+        }
+    }
+
+    function renderPhase1UI() {
+        let area = document.getElementById('phase1Area');
+        if (!groupsP1.length) {
+            area.innerHTML = '<div class="panel"><div class="panel-body" style="color:var(--text-muted);">Aucun tirage P1.</div></div>';
+            return;
+        }
+
+        let groupsHtml = '<div class="groups-grid" style="margin-bottom:16px;">';
+        groupsP1.forEach(grp => {
+            let rank = computeRankP1(grp.name);
+            groupsHtml += `<div class="group-card"><div class="group-title">📊 Groupe ${grp.name}</div>`;
+            groupsHtml += `<table class="ranking-table" style="margin:0;"><thead><tr><th>#</th><th>Club / Joueurs</th><th>Pts</th><th>V/N/D</th><th>BP:BC</th><th>Diff</th></tr></thead><tbody>`;
+            rank.forEach((r, idx) => {
+                let medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                let medal = medals[idx] !== undefined ? medals[idx] : (idx + 1);
+                groupsHtml += `<tr class="rank-${idx + 1}">
+                    <td class="rank-num">${medal}</td>
+                    <td><b>${esc(r.team.club)}</b><br><span style="font-size:0.62rem;color:var(--text-muted)">${esc(r.team.player1)} · ${esc(r.team.player2)}</span></td>
+                    <td><b>${r.pts}</b></td>
+                    <td style="color:var(--text-muted)">${r.w}/${r.d}/${r.l}</td>
+                    <td style="color:var(--text-muted)">${r.bp}:${r.bc}</td>
+                    <td style="${r.diff > 0 ? 'color:var(--accent)' : r.diff < 0 ? 'color:var(--danger)' : ''}">${r.diff > 0 ? '+' : ''}${r.diff}</td>
+                </tr>`;
+            });
+            groupsHtml += `</tbody></table></div>`;
+        });
+        groupsHtml += '</div>';
+
+        let matchesHtml = `<div class="panel"><div class="panel-header">🏓 Matchs Phase 1 <span style="font-size:0.7rem;color:var(--text-muted);font-weight:400;">Terrains modifiables</span></div><div class="panel-body">`;
+        for (let grp of groupsP1) {
+            let grpMatches = matchesP1.filter(m => m.group === grp.name);
+            matchesHtml += `<div class="round-label">Groupe ${grp.name}</div><div style="margin-bottom:6px;">`;
+            grpMatches.forEach(m => {
+                let played = isPlayed(m);
+                matchesHtml += `<div class="match-row${played ? ' played' : ''}">
+                    <div class="match-teams">
+                        <div><strong>${esc(m.team1.club)}</strong><br><span style="font-size:0.6rem;color:var(--text-muted)">${esc(m.team1.player1)}/${esc(m.team1.player2)}</span></div>
+                        <span class="vs">vs</span>
+                        <div><strong>${esc(m.team2.club)}</strong><br><span style="font-size:0.6rem;color:var(--text-muted)">${esc(m.team2.player1)}/${esc(m.team2.player2)}</span></div>
+                    </div>
+                    <div class="match-scores">
+                        <input class="score-input p1score" type="number" min="0" data-id="${m.id}" data-side="1" value="${m.score1 ?? ''}" placeholder="0">
+                        <span class="score-sep">–</span>
+                        <input class="score-input p1score" type="number" min="0" data-id="${m.id}" data-side="2" value="${m.score2 ?? ''}" placeholder="0">
+                    </div>
+                    <div class="terrain-badge">
+                        <span class="terrain-label">Terrain</span>
+                        <select class="terrain-select" data-id="${m.id}" data-phase="1">
+                            ${[...Array(nbTerrains)].map((_, i) => `<option value="${i + 1}" ${m.terrain === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="time-badge">
+                        <span class="time-label">🕐</span>
+                        <input type="time" class="time-input" data-id="${m.id}" data-phase="1" value="${m.startTime || ''}">
+                    </div>
+                </div>`;
+            });
+            matchesHtml += `</div>`;
+        }
+        matchesHtml += `</div></div>`;
+        area.innerHTML = groupsHtml + matchesHtml;
+
+        document.querySelectorAll('#phase1Area .p1score').forEach(inp => {
+            inp.removeEventListener('input', p1Handler);
+            inp.addEventListener('input', p1Handler);
+        });
+        document.querySelectorAll('#phase1Area .terrain-select').forEach(sel => {
+            sel.removeEventListener('change', terrainChangeHandler);
+            sel.addEventListener('change', terrainChangeHandler);
+        });
+        document.querySelectorAll('#phase1Area .time-input').forEach(inp => {
+            inp.addEventListener('change', function() {
+                updateMatchTime(parseInt(this.dataset.id), 1, this.value);
+            });
+        });
+    }
+
+    function terrainChangeHandler(e) {
+        let sel = e.target;
+        let matchId = parseInt(sel.dataset.id);
+        let phase = parseInt(sel.dataset.phase);
+        let newVal = sel.value;
+        updateTerrain(matchId, phase, newVal);
+    }
+
+    function p1Handler(e) {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les scores");
+            // Réinitialiser la valeur
+            e.target.value = e.target.defaultValue || '';
+            return;
+        }
+
+        let inp = e.target;
+        let mid = parseInt(inp.dataset.id);
+        let m = matchesP1.find(x => x.id === mid);
+        if (m) {
+            if (inp.dataset.side === '1') m.score1 = inp.value;
+            else m.score2 = inp.value;
+            renderPhase1UI();
+            renderRankingP1();
+            if (matchesP2.length) renderPhase2UI();
+            updateGlobalRanking();
+            renderSchedule();
+            updateCounters();
+            saveData();
+        }
+    }
+
+    function renderRankingP1() {
+        let area = document.getElementById('rankingP1Area');
+        if (!groupsP1.length || !matchesP1.length) {
+            area.innerHTML = '<div class="panel"><div class="panel-body" style="color:var(--text-muted);">Générez la Phase 1 d\'abord.</div></div>';
+            return;
+        }
+        let all = [];
+        for (let grp of groupsP1) {
+            let rank = computeRankP1(grp.name);
+            rank.forEach(r => {
+                all.push({
+                    team: r.team,
+                    pts: r.pts,
+                    diff: r.diff,
+                    bp: r.bp,
+                    wins: r.w,
+                    draws: r.d,
+                    losses: r.l
+                });
+            });
+        }
+        all.sort((a, b) => b.pts - a.pts || b.diff - a.diff || b.bp - a.bp || b.wins - a.wins);
+        let html = `<div class="panel"><div class="panel-header">📊 Classement général Phase 1</div><div class="panel-body"><table class="ranking-table"><thead><tr><th>Rang</th><th>Club</th><th>Joueurs</th><th>Pts</th><th>Diff</th><th>BP</th><th>V/N/D</th></thead><tbody>`;
+        all.forEach((r, idx) => {
+            let medals = ['🥇', '🥈', '🥉'];
+            let medalSymbol = medals[idx] || (idx + 1);
+            html += `<tr class="rank-${idx + 1}">
+                <td class="rank-num">${medalSymbol}</td>
+                <td><b>${esc(r.team.club)}</b></td>
+                <td style="font-size:0.62rem;color:var(--text-muted)">${esc(r.team.player1)}<br>${esc(r.team.player2)}</td>
+                <td><b>${r.pts}</b></td>
+                <td style="${r.diff > 0 ? 'color:var(--accent)' : r.diff < 0 ? 'color:var(--danger)' : ''}">${r.diff > 0 ? '+' : ''}${r.diff}</td>
+                <td>${r.bp}</td>
+                <td style="color:var(--text-muted)">${r.wins}/${r.draws}/${r.losses}</td>
+            </tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+        area.innerHTML = html;
+    }
+
+    function getAllTeamsRankedP1() {
+        let all = [];
+        for (let grp of groupsP1) {
+            let rank = computeRankP1(grp.name);
+            rank.forEach((r, idx) => {
+                all.push({
+                    team: r.team,
+                    groupOrigin: grp.name,
+                    posInGroup: idx + 1,
+                    pts: r.pts,
+                    diff: r.diff,
+                    bp: r.bp,
+                    wins: r.w
+                });
+            });
+        }
+        return all;
+    }
+
+    function buildSnakeGroups(qualified, groupSize, nbGroups, categoryPrefix) {
+        let groups = Array.from({ length: nbGroups }, () => []);
+        for (let i = 0; i < qualified.length; i++) {
+            let idx = i % nbGroups;
+            if (Math.floor(i / nbGroups) % 2 === 0) groups[idx].push(qualified[i]);
+            else groups[nbGroups - 1 - idx].push(qualified[i]);
+        }
+        for (let g = 0; g < groups.length; g++) {
+            let conflict = true, attempts = 0;
+            while (conflict && attempts < 50) {
+                conflict = false;
+                let origins = groups[g].map(t => t.groupOrigin);
+                for (let i = 0; i < origins.length; i++) {
+                    for (let j = i + 1; j < origins.length; j++) {
+                        if (origins[i] === origins[j]) conflict = true;
+                    }
+                }
+                if (conflict) {
+                    let swapped = false;
+                    for (let other = 0; other < groups.length && !swapped; other++) {
+                        if (other === g) continue;
+                        for (let i = 0; i < groups[g].length && !swapped; i++) {
+                            for (let j = 0; j < groups[other].length && !swapped; j++) {
+                                let ti = groups[g][i], tj = groups[other][j];
+                                groups[g][i] = tj;
+                                groups[other][j] = ti;
+                                let origG = groups[g].map(t => t.groupOrigin);
+                                let origO = groups[other].map(t => t.groupOrigin);
+                                let cg = origG.some((v, idx) => origG.indexOf(v) !== idx);
+                                let co = origO.some((v, idx) => origO.indexOf(v) !== idx);
+                                if (!cg && !co) {
+                                    swapped = true;
+                                    break;
+                                } else {
+                                    groups[g][i] = ti;
+                                    groups[other][j] = tj;
+                                }
+                            }
+                        }
+                    }
+                    if (!swapped) break;
+                }
+                attempts++;
+            }
+        }
+        return groups.map((grp, idx) => ({
+            name: `${categoryPrefix} ${idx + 1}`,
+            teams: grp.map(t => t.team),
+            category: categoryPrefix === 'Élite' ? 'elite' : 'consol'
+        }));
+    }
+
+    function genPhase2() {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les données");
+            return;
+        }
+
+        if (!groupsP1.length || !matchesP1.length) {
+            showMsg("Générez Phase 1 d'abord");
+            return;
+        }
+        let all = getAllTeamsRankedP1();
+        let firsts = all.filter(t => t.posInGroup === 1);
+        let seconds = all.filter(t => t.posInGroup === 2);
+        let thirds = all.filter(t => t.posInGroup === 3).sort((a, b) => (b.pts - a.pts) || (b.diff - a.diff) || (b.bp - a.bp));
+        let fourths = all.filter(t => t.posInGroup === 4);
+        let fifths = all.filter(t => t.posInGroup === 5);
+
+        function buildAndGenerate(eliteQ, consolQ, eliteSize, eliteNb, consolSize, consolNb, msgLabel) {
+            if (eliteQ.length !== eliteSize * eliteNb || consolQ.length !== consolSize * consolNb) {
+                showMsg(`Erreur sélection P2 ${msgLabel} (élite:${eliteQ.length}/${eliteSize * eliteNb} consol:${consolQ.length}/${consolSize * consolNb})`);
+                return false;
+            }
+            eliteQ.sort((a, b) => (b.pts - a.pts) || (b.diff - a.diff) || (b.bp - a.bp));
+            consolQ.sort((a, b) => (b.pts - a.pts) || (b.diff - a.diff) || (b.bp - a.bp));
+            let eliteGroups = buildSnakeGroups(eliteQ, eliteSize, eliteNb, "Élite");
+            let consolGroups = buildSnakeGroups(consolQ, consolSize, consolNb, "Consolation");
+            matchesP2 = [];
+            let nextId = 1;
+            let allGroups = [...eliteGroups, ...consolGroups];
+            for (let idx = 0; idx < allGroups.length; idx++) {
+                let grp = allGroups[idx];
+                let baseTerrain = (idx % nbTerrains) + 1;
+                let n = grp.teams.length;
+                let indices = [...Array(n).keys()];
+                if (n % 2 === 1) indices.push(-1);
+                let rounds = indices.length - 1;
+                for (let round = 0; round < rounds; round++) {
+                    for (let i = 0; i < indices.length / 2; i++) {
+                        let a = indices[i];
+                        let b = indices[indices.length - 1 - i];
+                        if (a !== -1 && b !== -1) {
+                            matchesP2.push({
+                                id: nextId++,
+                                category: grp.category,
+                                groupName: grp.name,
+                                team1: grp.teams[a],
+                                team2: grp.teams[b],
+                                score1: '',
+                                score2: '',
+                                terrain: baseTerrain
+                            });
+                        }
+                    }
+                    indices.splice(1, 0, indices.pop());
+                }
+            }
+            showMsg(`Phase 2 : ${matchesP2.length} matchs générés`);
+            return true;
+        }
+
+        if (currentFormat === "A") {
+            let eliteQ = [...firsts, ...seconds];
+            let consolQ = [...thirds, ...fourths];
+            buildAndGenerate(eliteQ, consolQ, 4, 5, 4, 5, "A");
+        } else if (currentFormat === "B") {
+            let eliteQ = [...firsts, ...seconds];
+            let consolQ = [...thirds, ...fourths];
+            buildAndGenerate(eliteQ, consolQ, 5, 4, 5, 4, "B");
+        } else if (currentFormat === "C") {
+            let eliteQ = [...firsts, ...seconds];
+            let needed = 20 - eliteQ.length;
+            eliteQ.push(...thirds.slice(0, needed));
+            let consolQ = [...thirds.slice(needed), ...fourths];
+            let consolNeeded = 20 - consolQ.length;
+            consolQ.push(...fifths.slice(0, consolNeeded));
+            buildAndGenerate(eliteQ, consolQ, 4, 5, 4, 5, "C");
+        } else if (currentFormat === "D") {
+            let eliteQ = [...firsts, ...seconds];
+            let needed = 20 - eliteQ.length;
+            eliteQ.push(...thirds.slice(0, needed));
+            let consolQ = [...thirds.slice(needed), ...fourths];
+            let consolNeeded = 20 - consolQ.length;
+            consolQ.push(...fifths.slice(0, consolNeeded));
+            buildAndGenerate(eliteQ, consolQ, 5, 4, 5, 4, "D");
+        }
+
+        renderPhase2UI();
+        renderSchedule();
+        updateCounters();
+        saveData();
+        updateStatsRecap();
+    }
+
+    function computePhase2Rank(groupName) {
+        let mArr = matchesP2.filter(m => m.groupName === groupName);
+        let teamIds = new Set();
+        mArr.forEach(m => {
+            if (m.team1) teamIds.add(m.team1.id);
+            if (m.team2) teamIds.add(m.team2.id);
+        });
+        let stats = Array.from(teamIds).map(tid => {
+            let t = teams.find(t => t.id === tid);
+            return { team: t, pts: 0, w: 0, d: 0, l: 0, bp: 0, bc: 0, diff: 0 };
+        });
+        mArr.forEach(m => {
+            if (!isPlayed(m)) return;
+            let s1 = getScore(m.score1), s2 = getScore(m.score2);
+            let t1 = stats.find(s => s.team.id === m.team1.id);
+            let t2 = stats.find(s => s.team.id === m.team2.id);
+            if (!t1 || !t2) return;
+            t1.bp += s1;
+            t1.bc += s2;
+            t2.bp += s2;
+            t2.bc += s1;
+            if (s1 > s2) {
+                t1.w++;
+                t2.l++;
+                t1.pts += 3;
+            } else if (s2 > s1) {
+                t2.w++;
+                t1.l++;
+                t2.pts += 3;
+            } else {
+                t1.d++;
+                t2.d++;
+                t1.pts += 2;
+                t2.pts += 2;
+            }
+        });
+        stats.forEach(s => s.diff = s.bp - s.bc);
+        stats.sort((a, b) => b.pts - a.pts || b.diff - a.diff || b.bp - a.bp || b.w - a.w);
+        return stats;
+    }
+
+    function renderPhase2UI() {
+        let area = document.getElementById('phase2Area');
+        if (!matchesP2.length) {
+            area.innerHTML = '<div class="panel"><div class="panel-body" style="color:var(--text-muted);">Phase 2 non générée.</div></div>';
+            return;
+        }
+        let groupsMap = new Map();
+        matchesP2.forEach(m => {
+            if (!groupsMap.has(m.groupName)) groupsMap.set(m.groupName, []);
+            groupsMap.get(m.groupName).push(m);
+        });
+        let eliteHtml = '', consolHtml = '';
+        for (let [gName, matches] of groupsMap.entries()) {
+            let isElite = matches[0].category === 'elite';
+            let rankStats = computePhase2Rank(gName);
+            let sectionHtml = `<div class="panel"><div class="panel-header">
+                <span style="display:flex;align-items:center;gap:8px;">
+                    <span class="phase-badge ${isElite ? 'elite' : 'consol'}">${isElite ? '🏅 ÉLITE' : '🎗️ CONSOLATION'}</span>
+                    <b>${gName}</b>
+                </span>
+            </div><div class="panel-body">`;
+            matches.forEach(m => {
+                let played = isPlayed(m);
+                sectionHtml += `<div class="match-row${played ? ' played' : ''}">
+                    <div class="match-teams">
+                        <div><strong>${esc(m.team1?.club || '?')}</strong><br><span style="font-size:0.6rem;color:var(--text-muted)">${esc(m.team1?.player1 || '')}/${esc(m.team1?.player2 || '')}</span></div>
+                        <span class="vs">vs</span>
+                        <div><strong>${esc(m.team2?.club || '?')}</strong><br><span style="font-size:0.6rem;color:var(--text-muted)">${esc(m.team2?.player1 || '')}/${esc(m.team2?.player2 || '')}</span></div>
+                    </div>
+                    <div class="match-scores">
+                        <input class="score-input p2score" type="number" min="0" data-id="${m.id}" data-side="1" value="${m.score1 ?? ''}" placeholder="0">
+                        <span class="score-sep">–</span>
+                        <input class="score-input p2score" type="number" min="0" data-id="${m.id}" data-side="2" value="${m.score2 ?? ''}" placeholder="0">
+                    </div>
+                    <div class="terrain-badge">
+                        <span class="terrain-label">Terrain</span>
+                        <select class="terrain-select" data-id="${m.id}" data-phase="2">
+                            ${[...Array(nbTerrains)].map((_, i) => `<option value="${i + 1}" ${m.terrain === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="time-badge">
+                        <span class="time-label">🕐</span>
+                        <input type="time" class="time-input" data-id="${m.id}" data-phase="2" value="${m.startTime || ''}">
+                    </div>
+                </div>`;
+            });
+            sectionHtml += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:0.72rem;color:var(--text-muted);">
+                <b style="color:var(--text);">Classement :</b> ${rankStats.map((r, i) => `<span style="${i === 0 ? 'color:var(--accent);font-weight:700;' : ''}">${esc(r.team.club)} <b>${r.pts}</b>pts</span>`).join(' · ')}
+            </div></div></div>`;
+            if (isElite) eliteHtml += sectionHtml;
+            else consolHtml += sectionHtml;
+        }
+        let fullHtml = `<div id="phase2EliteContainer">${eliteHtml}</div><div class="section-divider"></div><div id="phase2ConsolContainer">${consolHtml}</div>`;
+        area.innerHTML = fullHtml;
+        document.querySelectorAll('#phase2Area .p2score').forEach(inp => {
+            inp.removeEventListener('input', p2Handler);
+            inp.addEventListener('input', p2Handler);
+        });
+        document.querySelectorAll('#phase2Area .terrain-select').forEach(sel => {
+            sel.removeEventListener('change', terrainChangeHandler);
+            sel.addEventListener('change', terrainChangeHandler);
+        });
+        document.querySelectorAll('#phase2Area .time-input').forEach(inp => {
+            inp.addEventListener('change', function() {
+                updateMatchTime(parseInt(this.dataset.id), 2, this.value);
+            });
+        });
+    }
+
+    function p2Handler(e) {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les scores");
+            // Réinitialiser la valeur
+            e.target.value = e.target.defaultValue || '';
+            return;
+        }
+
+        let inp = e.target;
+        let mid = parseInt(inp.dataset.id);
+        let m = matchesP2.find(x => x.id === mid);
+        if (m) {
+            if (inp.dataset.side === '1') m.score1 = inp.value;
+            else m.score2 = inp.value;
+            renderPhase2UI();
+            updateGlobalRanking();
+            renderSchedule();
+            updateCounters();
+            saveData();
+        }
+    }
+
+    function updateMatchTime(matchId, phase, newVal) {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les horaires");
+            return;
+        }
+
+        let m = phase === 1 ? matchesP1.find(x => x.id === matchId) : matchesP2.find(x => x.id === matchId);
+        if (m) {
+            m.startTime = newVal;
+            saveData();
+            renderSchedule();
+            renderPlanning();
+        }
+    }
+
+    function computeTotalPoints() {
+        let map = new Map();
+        teams.forEach(t => map.set(t.id, {
+            pts: 0,
+            diff: 0,
+            bp: 0,
+            bc: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            team: t,
+            ptsP1: 0,
+            ptsP2: 0
+        }));
+        function add(id, forScore, against, win, draw, phase) {
+            let s = map.get(id);
+            if (!s) return;
+            if (win) {
+                s.pts += 3;
+                s.wins++;
+                if (phase === 1) s.ptsP1 += 3;
+                else s.ptsP2 += 3;
+            } else if (draw) {
+                s.pts += 2;
+                s.draws++;
+                if (phase === 1) s.ptsP1 += 2;
+                else s.ptsP2 += 2;
+            } else {
+                s.losses++;
+            }
+            s.bp += forScore;
+            s.bc += against;
+            s.diff += (forScore - against);
+        }
+        matchesP1.forEach(m => {
+            if (!isPlayed(m)) return;
+            let s1 = getScore(m.score1), s2 = getScore(m.score2);
+            if (s1 > s2) {
+                add(m.team1.id, s1, s2, true, false, 1);
+                add(m.team2.id, s2, s1, false, false, 1);
+            } else if (s2 > s1) {
+                add(m.team2.id, s2, s1, true, false, 1);
+                add(m.team1.id, s1, s2, false, false, 1);
+            } else {
+                add(m.team1.id, s1, s2, false, true, 1);
+                add(m.team2.id, s2, s1, false, true, 1);
+            }
+        });
+        matchesP2.forEach(m => {
+            if (!isPlayed(m) || !m.team1 || !m.team2) return;
+            let s1 = getScore(m.score1), s2 = getScore(m.score2);
+            if (s1 > s2) {
+                add(m.team1.id, s1, s2, true, false, 2);
+                add(m.team2.id, s2, s1, false, false, 2);
+            } else if (s2 > s1) {
+                add(m.team2.id, s2, s1, true, false, 2);
+                add(m.team1.id, s1, s2, false, false, 2);
+            } else {
+                add(m.team1.id, s1, s2, false, true, 2);
+                add(m.team2.id, s2, s1, false, true, 2);
+            }
+        });
+        return Array.from(map.values()).sort((a, b) => b.pts - a.pts || b.diff - a.diff || b.bp - a.bp || b.wins - a.wins);
+    }
+
+    function updateGlobalRanking() {
+        let ranking = computeTotalPoints();
+
+        let eliteIds = new Set();
+        let consolIds = new Set();
+        matchesP2.forEach(m => {
+            let cat = m.category;
+            if (m.team1?.id !== undefined) {
+                if (cat === 'elite') eliteIds.add(m.team1.id);
+                else consolIds.add(m.team1.id);
+            }
+            if (m.team2?.id !== undefined) {
+                if (cat === 'elite') eliteIds.add(m.team2.id);
+                else consolIds.add(m.team2.id);
+            }
+        });
+
+        const hasP2 = eliteIds.size > 0 || consolIds.size > 0;
+
+        let eliteRanking = ranking.filter(r => eliteIds.has(r.team.id));
+        let consolRanking = ranking.filter(r => consolIds.has(r.team.id));
+        let otherRanking = ranking.filter(r => !eliteIds.has(r.team.id) && !consolIds.has(r.team.id));
+
+        function buildRow(r, globalRank, localRank, localMedals) {
+            let gMedals = ['🥇', '🥈', '🥉'];
+            let localSymbol = localMedals[localRank] !== undefined ? localMedals[localRank] : (localRank + 1);
+            let diff = r.diff > 0 ? `+${r.diff}` : r.diff;
+            let diffColor = r.diff > 0 ? 'color:var(--accent)' : r.diff < 0 ? 'color:var(--danger)' : '';
+            return `<tr class="rank-${localRank + 1}">
+                <td class="rank-num">${localSymbol}</td>
+                <td style="font-size:0.68rem;color:var(--text-muted);text-align:center;font-weight:700;">${globalRank}</td>
+                <td><b>${esc(r.team.club)}</b></td>
+                <td style="font-size:0.62rem;color:var(--text-muted)">${esc(r.team.player1)}<br>${esc(r.team.player2)}</td>
+                <td><b>${r.pts}</b></td>
+                <td style="color:var(--text-muted)">${r.ptsP1 || 0}</td>
+                <td style="color:var(--text-muted)">${r.ptsP2 || 0}</td>
+                <td style="${diffColor}">${diff}</td>
+                <td>${r.bp}</td>
+                <td style="color:var(--text-muted)">${r.wins}/${r.draws}/${r.losses}</td>
+            </tr>`;
+        }
+
+        function buildPodium(arr, label, color, emoji) {
+            if (!arr.length) return '';
+            let html = `<div class="podium">`;
+            let medals = [
+                { pos: 1, cls: 'silver', sym: '🥈' },
+                { pos: 0, cls: 'gold', sym: '🥇' },
+                { pos: 2, cls: 'bronze', sym: '🥉' },
+                { pos: 3, cls: '', sym: '4️⃣' }
+            ];
+            medals.forEach(({ pos, cls, sym }) => {
+                if (arr[pos]) {
+                    html += `<div class="podium-card ${cls}" style="${cls === '' ? 'opacity:0.8' : ''}">
+                        <div class="medal">${sym}</div>
+                        <div style="font-size:0.6rem;font-weight:700;color:${color};margin-bottom:2px;">${label}</div>
+                        <div class="club-name">${esc(arr[pos].team.club)}</div>
+                        <div class="pts">${arr[pos].pts} pts</div>
+                        <div class="diff">Diff ${arr[pos].diff >= 0 ? '+' : ''}${arr[pos].diff}</div>
+                    </div>`;
+                }
+            });
+            return html + `</div>`;
+        }
+
+        let thead = `<thead><tr>
+            <th>Rang ${hasP2 ? 'tableau' : ''}</th>
+            <th style="color:var(--text-muted);">Rang global</th>
+            <th>Club</th><th>Joueurs</th>
+            <th>Pts</th><th style="color:var(--text-muted)">P1</th><th style="color:var(--text-muted)">P2</th>
+            <th>Diff</th><th>BP</th><th>V/N/D</th>
+        </tr></thead>`;
+
+        let html = '';
+
+        if (hasP2) {
+            html += buildPodium(eliteRanking, '🏅 Élite', 'var(--elite)', '🏅');
+            html += `<div style="display:flex;align-items:center;gap:10px;margin:16px 0 8px;">
+                <span style="font-size:1.1rem;">🏅</span>
+                <span style="font-weight:800;font-size:0.9rem;color:var(--elite);">Tableau Élite</span>
+                <span style="font-size:0.68rem;color:var(--text-muted);">Places 1 à ${eliteRanking.length} du classement général</span>
+            </div>`;
+            html += `<table class="ranking-table">${thead}<tbody>`;
+            eliteRanking.forEach((r, idx) => {
+                html += buildRow(r, idx + 1, idx, ['🥇', '🥈', '🥉']);
+            });
+            html += `</tbody></table>`;
+
+            html += `<div style="margin:20px 0;border-top:3px dashed var(--border);display:flex;align-items:center;justify-content:center;gap:12px;">
+                <span style="background:var(--surface2);padding:4px 16px;border-radius:20px;font-size:0.72rem;color:var(--text-muted);font-weight:600;">
+                    · · · Tableau Consolation · · ·
+                </span>
+            </div>`;
+
+            let consolStart = eliteRanking.length + 1;
+            html += buildPodium(consolRanking, '🎗️ Consol.', 'var(--consol)', '🎗️');
+            html += `<div style="display:flex;align-items:center;gap:10px;margin:16px 0 8px;">
+                <span style="font-size:1.1rem;">🎗️</span>
+                <span style="font-weight:800;font-size:0.9rem;color:var(--consol);">Tableau Consolation</span>
+                <span style="font-size:0.68rem;color:var(--text-muted);">Places ${consolStart} à ${consolStart + consolRanking.length - 1} du classement général</span>
+            </div>`;
+            html += `<table class="ranking-table">${thead}<tbody>`;
+            consolRanking.forEach((r, idx) => {
+                html += buildRow(r, consolStart + idx, idx, ['🥇', '🥈', '🥉']);
+            });
+            html += `</tbody></table>`;
+        } else {
+            let top4 = ranking.slice(0, 4);
+            html += buildPodium(top4, '', 'var(--accent)', '');
+            html += `<p style="font-size:0.72rem;color:var(--text-muted);margin:8px 0 12px;">
+                ℹ️ Générez la Phase 2 pour voir le classement séparé Élite / Consolation.
+            </p>`;
+            html += `<table class="ranking-table">${thead}<tbody>`;
+            ranking.forEach((r, idx) => {
+                html += buildRow(r, idx + 1, idx, ['🥇', '🥈', '🥉']);
+            });
+            html += `</tbody></table>`;
+        }
+
+        document.getElementById('rankingArea').innerHTML =
+            `<div class="panel">
+                <div class="panel-header">🏆 Classement Final (P1 + P2)</div>
+                <div class="panel-body">${html}</div>
+            </div>`;
+    }
+
+    function computeMinRest(matchList, duration) {
+        if (!matchList.length) return null;
+        let byTeam = {};
+        matchList.forEach(m => {
+            if (!m.startTime) return;
+            let t = timeToMin(m.startTime);
+            [m.team1?.id, m.team2?.id].forEach(id => {
+                if (!id) return;
+                if (!byTeam[id]) byTeam[id] = [];
+                byTeam[id].push(t);
+            });
+        });
+        let minRest = Infinity;
+        Object.values(byTeam).forEach(times => {
+            times.sort((a, b) => a - b);
+            for (let i = 1; i < times.length; i++) {
+                let rest = times[i] - times[i - 1] - duration;
+                if (rest < minRest) minRest = rest;
+            }
+        });
+        return minRest === Infinity ? null : minRest;
+    }
+
+    function genHoraires() {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les horaires");
+            return;
+        }
+
+        readTimeSettings();
+
+        function scheduleGlobal(matchList, startTimeStr, duration, pause) {
+            if (!matchList.length) return;
+            let slotDur = duration + pause;
+            let startMin = timeToMin(startTimeStr);
+
+            matchList.forEach(m => { m.startTime = ''; });
+
+            let remaining = [...matchList];
+            let wave = 0;
+            let busyInPrevWave = new Set();
+            let lastPlayedWave = {};
+
+            while (remaining.length > 0) {
+                let waveTime = startMin + wave * slotDur;
+                let busyInWave = new Set();
+                let waveMatches = [];
+
+                for (let t = 1; t <= nbTerrains; t++) {
+                    if (!remaining.length) break;
+
+                    let candidates = remaining.filter(m =>
+                        !busyInPrevWave.has(m.team1?.id) &&
+                        !busyInPrevWave.has(m.team2?.id) &&
+                        !busyInWave.has(m.team1?.id) &&
+                        !busyInWave.has(m.team2?.id)
+                    );
+
+                    if (!candidates.length) {
+                        candidates = remaining.filter(m =>
+                            !busyInWave.has(m.team1?.id) &&
+                            !busyInWave.has(m.team2?.id)
+                        );
+                    }
+
+                    if (!candidates.length) continue;
+
+                    candidates.sort((a, b) => {
+                        let lastA = Math.max(
+                            lastPlayedWave[a.team1?.id] ?? -99,
+                            lastPlayedWave[a.team2?.id] ?? -99
+                        );
+                        let lastB = Math.max(
+                            lastPlayedWave[b.team1?.id] ?? -99,
+                            lastPlayedWave[b.team2?.id] ?? -99
+                        );
+                        return lastA - lastB;
+                    });
+
+                    let chosen = candidates[0];
+                    remaining.splice(remaining.indexOf(chosen), 1);
+
+                    chosen.startTime = minToTime(waveTime);
+                    chosen.terrain = t;
+                    busyInWave.add(chosen.team1?.id);
+                    busyInWave.add(chosen.team2?.id);
+                    lastPlayedWave[chosen.team1?.id] = wave;
+                    lastPlayedWave[chosen.team2?.id] = wave;
+                    waveMatches.push(chosen);
+                }
+
+                busyInPrevWave = busyInWave;
+
+                if (!waveMatches.length && remaining.length) {
+                    let m = remaining.shift();
+                    m.startTime = minToTime(waveTime);
+                    m.terrain = 1;
+                    busyInPrevWave = new Set([m.team1?.id, m.team2?.id]);
+                    lastPlayedWave[m.team1?.id] = wave;
+                    lastPlayedWave[m.team2?.id] = wave;
+                }
+
+                wave++;
+            }
+        }
+
+        scheduleGlobal(matchesP1, timeSettings.startP1, timeSettings.durationP1, timeSettings.breakP1);
+
+        let p1End = 0;
+        matchesP1.forEach(m => {
+            if (m.startTime) p1End = Math.max(p1End, timeToMin(m.startTime) + timeSettings.durationP1);
+        });
+        let lunchEnd = timeToMin(timeSettings.lunchStart) + timeSettings.lunchDuration;
+        let p2Start = Math.max(p1End, lunchEnd);
+        timeSettings.startP2 = minToTime(p2Start);
+
+        scheduleGlobal(matchesP2, timeSettings.startP2, timeSettings.durationP2, timeSettings.breakP2);
+
+        let minRestP1 = computeMinRest(matchesP1, timeSettings.durationP1);
+        let minRestP2 = computeMinRest(matchesP2, timeSettings.durationP2);
+
+        saveData();
+        renderPhase1UI();
+        if (matchesP2.length) renderPhase2UI();
+        renderSchedule();
+        renderPlanning();
+
+        let slotP1 = timeSettings.durationP1 + timeSettings.breakP1;
+        let slotP2 = timeSettings.durationP2 + timeSettings.breakP2;
+        let msg = `✅ P1 ${timeSettings.startP1}→${minToTime(p1End)} · Déj. ${timeSettings.lunchStart} (${timeSettings.lunchDuration}min) · P2 dès ${timeSettings.startP2}`;
+        document.getElementById('horairesInfo').textContent = msg;
+        document.getElementById('horairesInfo').style.display = 'block';
+        showMsg(`Horaires générés ✓ Repos ≥ ${slotP1}min (P1) / ${slotP2}min (P2)`);
+    }
+
+    function renderPlanning() {
+        let area = document.getElementById('planningArea');
+        if (!area) return;
+
+        function resolveTeam(t) {
+            return t ? (teams.find(x => x.id === t.id) || t) : null;
+        }
+
+        let allM = [
+            ...matchesP1.map(m => ({ ...m, phase: 'P1', phaseLabel: 'Phase 1', group: m.group, dur: timeSettings.durationP1 })),
+            ...matchesP2.map(m => ({ ...m, phase: 'P2', phaseLabel: m.category === 'elite' ? '🏅 Élite' : '🎗️ Consol', group: m.groupName, dur: timeSettings.durationP2 }))
+        ];
+
+        if (!allM.some(m => m.startTime)) {
+            area.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--text-muted);">
+                Générez d'abord les matchs puis cliquez sur <b>⏱️ Générer les horaires</b>.
+            </div></div>`;
+            return;
+        }
+
+        let withTime = allM.filter(m => m.startTime);
+        let allTimes = withTime.map(m => timeToMin(m.startTime));
+        let globalStart = Math.min(...allTimes);
+        let globalEnd = Math.max(...withTime.map(m => timeToMin(m.startTime) + m.dur));
+        let totalSpan = globalEnd - globalStart;
+
+        let restP1 = computeMinRest(matchesP1.filter(m => m.startTime), timeSettings.durationP1);
+        let restP2 = computeMinRest(matchesP2.filter(m => m.startTime), timeSettings.durationP2);
+
+        const GANTT_W = 800;
+        function toPx(min) {
+            return totalSpan > 0 ? Math.round((min / totalSpan) * GANTT_W) : 0;
+        }
+
+        let html = `<div class="panel">
+            <div class="panel-header">🗓️ Planning par Terrain
+                <div style="display:flex;gap:10px;font-size:0.68rem;font-weight:400;">
+                    <span style="color:var(--accent)">■ Phase 1</span>
+                    <span style="color:var(--elite)">■ Élite</span>
+                    <span style="color:var(--consol)">■ Consolation</span>
+                    ${restP1 !== null ? `<span style="color:var(--text-muted)">Repos min P1: <b>${restP1} min</b></span>` : ''}
+                    ${restP2 !== null ? `<span style="color:var(--text-muted)">Repos min P2: <b>${restP2} min</b></span>` : ''}
+                </div>
+            </div>
+            <div class="panel-body" style="overflow-x:auto;">`;
+
+        html += `<div style="display:flex;margin-left:80px;margin-bottom:4px;position:relative;min-width:${GANTT_W}px;">`;
+        let tickStep = 30;
+        for (let t = 0; t <= totalSpan; t += tickStep) {
+            let px = toPx(t);
+            html += `<span style="position:absolute;left:${px}px;font-size:0.58rem;color:var(--text-muted);font-family:'DM Mono',monospace;transform:translateX(-50%);">${minToTime(globalStart + t)}</span>`;
+        }
+        html += `</div>`;
+
+        let lunchStartMin = timeToMin(timeSettings.lunchStart || '12:30');
+        let lunchEndMin = lunchStartMin + (timeSettings.lunchDuration || 90);
+        let lunchLeft = toPx(lunchStartMin - globalStart);
+        let lunchWidth = toPx(lunchEndMin - lunchStartMin);
+
+        html += `<div style="position:relative;min-width:${GANTT_W + 80}px;">`;
+
+        if (lunchLeft >= 0 && lunchWidth > 0) {
+            html += `<div title="🍽️ Pause déjeuner ${timeSettings.lunchStart}→${minToTime(lunchEndMin)}" style="
+                position:absolute;left:${lunchLeft + 80}px;width:${lunchWidth}px;top:0;bottom:0;
+                background:rgba(240,192,64,0.12);border-left:2px dashed var(--warning);border-right:2px dashed var(--warning);
+                z-index:1;pointer-events:none;">
+                <span style="position:sticky;left:0;font-size:0.6rem;color:var(--warning);font-weight:700;padding:2px 4px;white-space:nowrap;">🍽️ Déjeuner</span>
+            </div>`;
+        }
+
+        html += `<div style="position:absolute;top:0;left:80px;right:0;bottom:0;pointer-events:none;">`;
+        for (let t = 0; t <= totalSpan; t += tickStep) {
+            let px = toPx(t);
+            html += `<div style="position:absolute;left:${px}px;top:0;bottom:0;border-left:1px dashed var(--border);"></div>`;
+        }
+        html += `</div>`;
+
+        for (let i = 1; i <= nbTerrains; i++) {
+            let terrainMatches = withTime.filter(m => m.terrain === i).sort((a, b) => a.startTime.localeCompare(b.startTime));
+            if (!terrainMatches.length) continue;
+            html += `<div style="display:flex;align-items:center;margin-bottom:6px;min-height:44px;">`;
+            html += `<div style="width:80px;flex-shrink:0;font-weight:800;font-size:0.7rem;color:white;background:var(--accent);border-radius:8px 0 0 8px;padding:4px 8px;display:flex;align-items:center;height:36px;">🎾 T${i}</div>`;
+            html += `<div style="position:relative;flex:1;height:36px;background:var(--surface);border-radius:0 8px 8px 0;border:1px solid var(--border);min-width:${GANTT_W}px;">`;
+
+            terrainMatches.forEach(m => {
+                let t1 = resolveTeam(m.team1), t2 = resolveTeam(m.team2);
+                let left = toPx(timeToMin(m.startTime) - globalStart);
+                let width = Math.max(toPx(m.dur), 60);
+                let cls = m.phase === 'P1' ? 'var(--accent)' : m.category === 'elite' ? 'var(--elite)' : 'var(--consol)';
+                let endT = minToTime(timeToMin(m.startTime) + m.dur);
+                let tooltip = `${m.startTime}→${endT} | ${m.phaseLabel} Gr.${m.group} | ${t1?.club || '?'} vs ${t2?.club || '?'}`;
+                html += `<div title="${esc(tooltip)}" style="position:absolute;left:${left}px;width:${width - 2}px;top:2px;bottom:2px;
+                    background:${cls};opacity:0.88;border-radius:6px;overflow:hidden;cursor:default;
+                    display:flex;flex-direction:column;justify-content:center;padding:2px 5px;">
+                    <span style="font-size:0.58rem;color:white;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.startTime} · ${m.phaseLabel}</span>
+                    <span style="font-size:0.55rem;color:rgba(255,255,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t1?.club || '?')} vs ${esc(t2?.club || '?')}</span>
+                </div>`;
+            });
+            html += `</div></div>`;
+        }
+        html += `</div></div></div>`;
+
+        let bySlot = {};
+        withTime.forEach(m => {
+            if (!bySlot[m.startTime]) bySlot[m.startTime] = [];
+            bySlot[m.startTime].push(m);
+        });
+        let sortedSlots = Object.keys(bySlot).sort();
+
+        html += `<div class="panel"><div class="panel-header">⏱️ Vagues (matchs simultanés par créneau)</div><div class="panel-body" style="overflow-x:auto;">`;
+        html += `<table class="ranking-table"><thead><tr><th>Heure</th><th>Fin</th>`;
+        for (let i = 1; i <= nbTerrains; i++) html += `<th>T${i}</th>`;
+        html += `</tr></thead><tbody>`;
+
+        sortedSlots.forEach(slotTime => {
+            let slotMatches = bySlot[slotTime];
+            let anyP2 = slotMatches.some(m => m.phase === 'P2');
+            let dur = anyP2 ? timeSettings.durationP2 : timeSettings.durationP1;
+            let endTime = minToTime(timeToMin(slotTime) + dur);
+            html += `<tr><td><b style="font-family:'DM Mono',monospace;color:var(--accent)">${slotTime}</b></td>`;
+            html += `<td style="font-family:'DM Mono',monospace;color:var(--text-muted)">${endTime}</td>`;
+            for (let i = 1; i <= nbTerrains; i++) {
+                let cell = slotMatches.find(m => m.terrain === i);
+                if (cell) {
+                    let t1 = resolveTeam(cell.team1), t2 = resolveTeam(cell.team2);
+                    let phColor = cell.phase === 'P1' ? 'var(--accent)' : cell.category === 'elite' ? 'var(--elite)' : 'var(--consol)';
+                    html += `<td style="font-size:0.65rem;">
+                        <div style="color:${phColor};font-weight:700;font-size:0.6rem;">${cell.phaseLabel} · ${esc(cell.group)}</div>
+                        <div><b>${esc(t1?.club || '?')}</b></div>
+                        <div style="color:var(--text-muted);font-size:0.58rem;">vs</div>
+                        <div><b>${esc(t2?.club || '?')}</b></div>
+                    </td>`;
+                } else {
+                    html += `<td style="color:var(--border);text-align:center;">—</td>`;
+                }
+            }
+            html += `</tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+
+        html += `<div class="panel"><div class="panel-header">⏳ Temps de repos entre matchs par club</div><div class="panel-body" style="overflow-x:auto;">`;
+        html += `<table class="ranking-table"><thead><tr><th>Club</th><th>Joueurs</th>`;
+        withTime.filter(m => m.phase === 'P1').length && (html += `<th>Matchs P1</th><th>Repos min P1</th>`);
+        withTime.filter(m => m.phase === 'P2').length && (html += `<th>Matchs P2</th><th>Repos min P2</th>`);
+        html += `</tr></thead><tbody>`;
+
+        teams.forEach(team => {
+            let myP1 = withTime.filter(m => m.phase === 'P1' && (m.team1?.id === team.id || m.team2?.id === team.id))
+                .map(m => timeToMin(m.startTime)).sort((a, b) => a - b);
+            let myP2 = withTime.filter(m => m.phase === 'P2' && (m.team1?.id === team.id || m.team2?.id === team.id))
+                .map(m => timeToMin(m.startTime)).sort((a, b) => a - b);
+            if (!myP1.length && !myP2.length) return;
+
+            function minRestArr(arr, dur) {
+                if (arr.length < 2) return null;
+                let min = Infinity;
+                for (let i = 1; i < arr.length; i++) min = Math.min(min, arr[i] - arr[i - 1] - dur);
+                return min;
+            }
+            let rP1 = minRestArr(myP1, timeSettings.durationP1);
+            let rP2 = minRestArr(myP2, timeSettings.durationP2);
+
+            let restColorP1 = rP1 === null ? '' : (rP1 < 15 ? 'color:var(--danger)' : rP1 < 30 ? 'color:var(--warning)' : 'color:var(--accent)');
+            let restColorP2 = rP2 === null ? '' : (rP2 < 15 ? 'color:var(--danger)' : rP2 < 30 ? 'color:var(--warning)' : 'color:var(--accent)');
+
+            html += `<tr><td><b>${esc(team.club)}</b></td><td style="font-size:0.62rem;color:var(--text-muted)">${esc(team.player1)}<br>${esc(team.player2)}</td>`;
+            if (withTime.filter(m => m.phase === 'P1').length) {
+                html += `<td style="font-size:0.62rem;font-family:'DM Mono',monospace">${myP1.map(t => minToTime(t)).join(' · ') || '—'}</td>`;
+                html += `<td style="${restColorP1};font-weight:700">${rP1 !== null ? rP1 + ' min' : '—'}</td>`;
+            }
+            if (withTime.filter(m => m.phase === 'P2').length) {
+                html += `<td style="font-size:0.62rem;font-family:'DM Mono',monospace">${myP2.map(t => minToTime(t)).join(' · ') || '—'}</td>`;
+                html += `<td style="${restColorP2};font-weight:700">${rP2 !== null ? rP2 + ' min' : '—'}</td>`;
+            }
+            html += `</tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+
+        area.innerHTML = html;
+    }
+
+    function renderSchedule() {
+        let container = document.getElementById('scheduleArea');
+        if (teams.length === 0) {
+            container.innerHTML = '<div class="panel"><div class="panel-body">Chargement...</div></div>';
+            return;
+        }
+
+        function resolveTeam(t) {
+            if (!t) return null;
+            return teams.find(x => x.id === t.id) || t;
+        }
+
+        let allMatches = [
+            ...matchesP1.map(m => ({
+                ...m,
+                phase: 'P1',
+                group: m.group,
+                category: 'P1',
+                team1: resolveTeam(m.team1),
+                team2: resolveTeam(m.team2)
+            })),
+            ...matchesP2.map(m => ({
+                ...m,
+                phase: 'P2',
+                group: m.groupName,
+                category: m.category,
+                team1: resolveTeam(m.team1),
+                team2: resolveTeam(m.team2)
+            }))
+        ];
+
+        let scheduleHtml = `<div class="panel"><div class="panel-header">📅 Programme par Club (cliquez pour dérouler)</div><div class="panel-body">`;
+
+        teams.forEach(team => {
+            let teamMatches = allMatches.filter(m => m.team1?.id === team.id || m.team2?.id === team.id);
+            if (teamMatches.length === 0) return;
+
+            scheduleHtml += `<div class="schedule-card">
+                <div class="schedule-club" data-club-id="${team.id}" data-count="${teamMatches.length}">
+                    <div class="schedule-club-info">
+                        <span class="schedule-club-name">🏸 <strong>${esc(team.club)}</strong></span>
+                        <span class="schedule-club-players">${esc(team.player1)} / ${esc(team.player2)}</span>
+                    </div>
+                    <span class="schedule-badge">▼ ${teamMatches.length} match${teamMatches.length > 1 ? 's' : ''}</span>
+                </div>
+                <div class="schedule-matches" id="schedule-${team.id}">`;
+
+            teamMatches.sort((a, b) => {
+                if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
+                if (a.startTime) return -1;
+                if (b.startTime) return 1;
+                return (a.phase === 'P1' ? 0 : 1) - (b.phase === 'P1' ? 0 : 1);
+            });
+            teamMatches.forEach(m => {
+                let isTeam1 = m.team1?.id === team.id;
+                let opponent = isTeam1 ? m.team2 : m.team1;
+                let scoreDisplay = '';
+                if (isPlayed(m)) {
+                    let myScore = parseInt(isTeam1 ? m.score1 : m.score2);
+                    let oppScore = parseInt(isTeam1 ? m.score2 : m.score1);
+                    let color = myScore > oppScore ? 'var(--accent)' : myScore < oppScore ? 'var(--danger)' : 'var(--warning)';
+                    scoreDisplay = ` <span style="color:${color}; font-weight:bold;">${myScore} - ${oppScore}</span>`;
+                } else {
+                    scoreDisplay = ` <span style="color:var(--text-muted);">(à jouer)</span>`;
+                }
+                let phaseLabel = m.phase === 'P2' ? (m.category === 'elite' ? '🏅 Élite' : '🎗️ Consolation') : '🏐 Poule';
+
+                let timeStr = m.startTime ? `<span class="time-display">${m.startTime}</span>` : '';
+                scheduleHtml += `<div class="schedule-match">
+                    <span style="display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;">
+                        ${timeStr}
+                        <b>${phaseLabel}</b>
+                        <span>${esc(m.group)}</span>
+                        <span style="color:var(--text-muted);">| Contre :</span>
+                        <b>${esc(opponent?.club || '?')}</b>
+                        <span style="font-size:0.6rem;color:var(--text-muted);">(${esc(opponent?.player1 || '')} / ${esc(opponent?.player2 || '')})</span>
+                        ${scoreDisplay}
+                        <span style="color:var(--text-muted);">| Terrain ${m.terrain}</span>
+                    </span>
+                </div>`;
+            });
+
+            scheduleHtml += `</div></div>`;
+        });
+
+        scheduleHtml += `</div></div>`;
+        container.innerHTML = scheduleHtml;
+
+        document.querySelectorAll('.schedule-club').forEach(el => {
+            let targetId = `schedule-${el.dataset.clubId}`;
+            let targetDiv = document.getElementById(targetId);
+            if (targetDiv) {
+                targetDiv.style.display = 'none';
+                el.addEventListener('click', () => {
+                    let open = targetDiv.style.display !== 'none';
+                    targetDiv.style.display = open ? 'none' : 'block';
+                    let badge = el.querySelector('.schedule-badge');
+                    if (badge) {
+                        let nb = parseInt(el.dataset.count) || targetDiv.children.length;
+                        badge.innerHTML = `${open ? '▼' : '▲'} ${nb} match${nb > 1 ? 's' : ''}`;
+                    }
+                });
+            }
+        });
+    }
+
+    function renderReglement() {
+        let area = document.getElementById('reglementArea');
+        if (!area) return;
+        const fmt = currentFormat;
+        const fmtData = {
+            A: {
+                p1groups: 10, p1size: 4, p2groups: 10, p2size: 4, matchsTotal: 6, p1matchs: 3, p2matchs: 3,
+                eliteGroups: 5, eliteSize: 4, consolGroups: 5, consolSize: 4,
+                eliteQ: '1ers et 2es de chaque groupe (20 équipes)',
+                consolQ: '3es et 4es de chaque groupe (20 équipes)', tie3: false
+            },
+            B: {
+                p1groups: 10, p1size: 4, p2groups: 8, p2size: 5, matchsTotal: 7, p1matchs: 3, p2matchs: 4,
+                eliteGroups: 4, eliteSize: 5, consolGroups: 4, consolSize: 5,
+                eliteQ: '1ers et 2es de chaque groupe (20 équipes)',
+                consolQ: '3es et 4es de chaque groupe (20 équipes)', tie3: false
+            },
+            C: {
+                p1groups: 8, p1size: 5, p2groups: 10, p2size: 4, matchsTotal: 7, p1matchs: 4, p2matchs: 3,
+                eliteGroups: 5, eliteSize: 4, consolGroups: 5, consolSize: 4,
+                eliteQ: '1ers, 2es + 4 meilleurs 3es (20 équipes)',
+                consolQ: '4 autres 3es, 4es et 5es (20 équipes)', tie3: true
+            },
+            D: {
+                p1groups: 8, p1size: 5, p2groups: 8, p2size: 5, matchsTotal: 8, p1matchs: 4, p2matchs: 4,
+                eliteGroups: 4, eliteSize: 5, consolGroups: 4, consolSize: 5,
+                eliteQ: '1ers, 2es + 4 meilleurs 3es (20 équipes)',
+                consolQ: '4 autres 3es, 4es et 5es (20 équipes)', tie3: true
+            }
+        };
+        const d = fmtData[fmt];
+        let p2Start = timeSettings.startP2 || minToTime(timeToMin(timeSettings.lunchStart || '12:30') + (timeSettings.lunchDuration || 90));
+        area.innerHTML = `
+        <div class="panel">
+          <div class="panel-header">
+            📖 Règlement du Tournoi
+            <span class="format-badge">Format ${fmt}</span>
+          </div>
+          <div class="panel-body" style="display:flex;flex-direction:column;gap:22px;">
+
+            <div class="regl-section">
+              <div class="regl-title">🏗️ Structure générale</div>
+              <div class="regl-body">
+                Le tournoi réunit <b>40 équipes</b> réparties en <b>2 phases</b>.
+                Chaque équipe dispute <b>${d.matchsTotal} matchs</b> au total :
+                <b>${d.p1matchs}</b> en Phase 1 (matin) + <b>${d.p2matchs}</b> en Phase 2 (après-midi).
+                <br><br>
+                <span class="pill">🌅 Phase 1 — Matin</span>
+                <b>${d.p1groups} groupes de ${d.p1size} équipes</b>.
+                Round-robin complet : chaque équipe rencontre toutes les autres de son groupe (${d.p1matchs} matchs).
+                <br><br>
+                <span class="pill">☀️ Phase 2 — Après-midi</span>
+                <b>${d.p2groups} groupes de ${d.p2size} équipes</b> formés après qualification.
+                Tirage en serpentin sur le classement P1 pour équilibrer les niveaux.
+              </div>
+            </div>
+
+            <div class="regl-section">
+              <div class="regl-title">🔀 Qualification Phase 1 → Phase 2</div>
+              <div class="regl-body">
+                À l'issue de la Phase 1, les 40 équipes sont réparties en deux tableaux :
+                <br><br>
+                <span class="pill elite">🏅 Tableau Élite</span>
+                ${d.eliteQ} → <b>${d.eliteGroups} groupes de ${d.eliteSize}</b>
+                <br><br>
+                <span class="pill consol">🎗️ Tableau Consolation</span>
+                ${d.consolQ} → <b>${d.consolGroups} groupes de ${d.consolSize}</b>
+                ${d.tie3 ? `<br><br><span class="pill warn">⚠️ Départage des 3es</span>
+                Les 8 groupes P1 produisent 8 équipes classées 3es. Les <b>4 meilleurs 3es</b>
+                (classés par points → différentiel → buts pour) rejoignent l'Élite.
+                Les <b>4 autres 3es</b> rejoignent la Consolation.` : ''}
+              </div>
+            </div>
+
+            <div class="regl-section">
+              <div class="regl-title">🧮 Système de points</div>
+              <div class="regl-body">
+                <table class="points-table">
+                  <thead><tr><th>Résultat</th><th>Points</th><th>Exemple</th></tr></thead>
+                  <tbody>
+                    <tr><td>✅ Victoire</td><td><b style="color:var(--accent)">3 pts</b></td><td>11–7 → vainqueur 3 pts, perdant 0 pt</td></tr>
+                    <tr><td>🤝 Match nul</td><td><b style="color:var(--warning)">2 pts chacun</b></td><td>9–9 → les deux équipes 2 pts</td></tr>
+                    <tr><td>❌ Défaite</td><td><b style="color:var(--danger)">0 pt</b></td><td>5–11 → perdant 0 pt</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="regl-section">
+              <div class="regl-title">📊 Critères de classement (ordre strict)</div>
+              <div class="regl-body">
+                <table class="points-table">
+                  <thead><tr><th>#</th><th>Critère</th><th>Explication</th></tr></thead>
+                  <tbody>
+                    <tr><td><b>1</b></td><td><b>Points totaux</b></td><td>V=3 · N=2 · D=0</td></tr>
+                    <tr><td><b>2</b></td><td><b>Différentiel de buts</b></td><td>Buts marqués − buts encaissés (goal average)</td></tr>
+                    <tr><td><b>3</b></td><td><b>Meilleure attaque</b></td><td>Total buts (jeux) marqués sur toute la phase</td></tr>
+                    <tr><td><b>4</b></td><td><b>Nombre de victoires</b></td><td>Matchs remportés</td></tr>
+                    <tr><td><b>5</b></td><td><b>Confrontation directe</b></td><td>Résultat entre équipes à égalité parfaite</td></tr>
+                  </tbody>
+                </table>
+                <br>Le <b>classement final</b> cumule les points Phase 1 + Phase 2.
+              </div>
+            </div>
+
+            <div class="regl-section">
+              <div class="regl-title">🥇 Palmarès</div>
+              <div class="regl-body">
+                <span class="pill elite">🏅 Élite</span>
+                Podium principal : <b>Champion · Vice-Champion · 3e</b>.
+                Le 1er de l'Élite est sacré Champion du Tournoi.
+                <br><br>
+                <span class="pill consol">🎗️ Consolation</span>
+                Podium indépendant 🥇 🥈 🥉 pour le tableau Consolation.
+                <br><br>
+                Dans le classement général, toutes les équipes Élite précèdent celles de la Consolation.
+              </div>
+            </div>
+
+            <div class="regl-section">
+              <div class="regl-title">🎾 Organisation pratique</div>
+              <div class="regl-body">
+                <b>${nbTerrains} terrains</b> · rotation libre (aucune équipe attachée à un terrain fixe).
+                <br><b>Repos garanti :</b> ≥ <b>${timeSettings.durationP1 + timeSettings.breakP1} min</b> en P1
+                · ≥ <b>${timeSettings.durationP2 + timeSettings.breakP2} min</b> en P2.
+                <br><br>
+                🌅 P1 → <b>${timeSettings.startP1}</b> · matchs <b>${timeSettings.durationP1} min</b> + ${timeSettings.breakP1} min transition<br>
+                🍽️ Déjeuner → <b>${timeSettings.lunchStart || '12:30'}</b> · <b>${timeSettings.lunchDuration || 90} min</b><br>
+                ☀️ P2 → <b>${p2Start}</b> · matchs <b>${timeSettings.durationP2} min</b> + ${timeSettings.breakP2} min transition
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function resetAll() {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour réinitialiser le tournoi");
+            return;
+        }
+
+        if (!confirm('Réinitialiser tout le tournoi ?')) return;
+        firebase.database().ref('tournoi').remove()
+            .then(() => {
+                localStorage.removeItem('pickle40_final');
+                initTeams();
+                groupsP1 = [];
+                matchesP1 = [];
+                matchesP2 = [];
+                timeSettings = {
+                    startP1: '09:00',
+                    durationP1: 30,
+                    breakP1: 5,
+                    lunchStart: '12:30',
+                    lunchDuration: 90,
+                    durationP2: 30,
+                    breakP2: 5
+                };
+                applyTimeSettings();
+                renderGroupsPreview();
+                document.getElementById('phase1Area').innerHTML = '';
+                document.getElementById('phase2Area').innerHTML = '';
+                if (document.getElementById('planningArea')) document.getElementById('planningArea').innerHTML = '';
+                renderRankingP1();
+                updateGlobalRanking();
+                updateCounters();
+                showMsg('Tournoi réinitialisé');
+                doTirage();
+                renderSchedule();
+                saveData();
+            })
+            .catch(() => {
+                localStorage.removeItem('pickle40_final');
+                initTeams();
+                groupsP1 = [];
+                matchesP1 = [];
+                matchesP2 = [];
+                timeSettings = {
+                    startP1: '09:00',
+                    durationP1: 30,
+                    breakP1: 5,
+                    lunchStart: '12:30',
+                    lunchDuration: 90,
+                    durationP2: 30,
+                    breakP2: 5
+                };
+                applyTimeSettings();
+                renderGroupsPreview();
+                document.getElementById('phase1Area').innerHTML = '';
+                document.getElementById('phase2Area').innerHTML = '';
+                if (document.getElementById('planningArea')) document.getElementById('planningArea').innerHTML = '';
+                renderRankingP1();
+                updateGlobalRanking();
+                updateCounters();
+                showMsg('Tournoi réinitialisé (mode local)');
+                doTirage();
+                renderSchedule();
+                saveData();
+            });
+    }
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(`${tabId}Tab`).classList.add('active');
+        document.getElementById('topRecap').style.display = (tabId === 'config') ? 'none' : 'flex';
+
+        const eliteBtn = document.getElementById('scrollEliteBtn');
+        const consolBtn = document.getElementById('scrollConsolBtn');
+        const printBtn = document.getElementById('printBtn');
+        eliteBtn.style.display = (tabId === 'phase2') ? 'block' : 'none';
+        consolBtn.style.display = (tabId === 'phase2') ? 'block' : 'none';
+        printBtn.style.display = (tabId === 'schedule') ? 'block' : 'none';
+
+        if (tabId === 'phase1') renderPhase1UI();
+        if (tabId === 'rankingP1') renderRankingP1();
+        if (tabId === 'phase2') renderPhase2UI();
+        if (tabId === 'ranking') updateGlobalRanking();
+        if (tabId === 'schedule') renderSchedule();
+        if (tabId === 'planning') renderPlanning();
+        if (tabId === 'reglement') renderReglement();
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // =============================================
+    // INITIALISATION
+    // =============================================
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', function() {
+            switchTab(this.dataset.tab);
+        });
+    });
+
+    document.querySelectorAll('input[name="format"]').forEach(r => {
+        r.addEventListener('change', function() {
+            if (!currentUser) {
+                showMsg("Connectez-vous pour modifier le format");
+                // Réinitialiser la sélection
+                document.querySelector(`input[name="format"][value="${currentFormat}"]`).checked = true;
+                return;
+            }
+            currentFormat = this.value;
+            updateStatsRecap();
+            saveData();
+            if (groupsP1.length) doTirage();
+        });
+    });
+
+    document.getElementById('scrollTopBtn').onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('printBtn').onclick = () => {
+        document.querySelectorAll('.schedule-matches').forEach(el => el.style.display = 'block');
+        window.print();
+        setTimeout(() => {
+            document.querySelectorAll('.schedule-matches').forEach(el => el.style.display = 'none');
+        }, 500);
+    };
+    document.getElementById('scrollEliteBtn').onclick = () => {
+        let el = document.getElementById('phase2EliteContainer');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        else showMsg("Section Élite non disponible");
+    };
+    document.getElementById('scrollConsolBtn').onclick = () => {
+        let el = document.getElementById('phase2ConsolContainer');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        else showMsg("Section Consolation non disponible");
+    };
+    document.getElementById('drawBtn').onclick = doTirage;
+    document.getElementById('genP1Btn').onclick = genPhase1;
+    document.getElementById('genP2Btn').onclick = genPhase2;
+    document.getElementById('resetBtn').onclick = resetAll;
+    document.getElementById('genHorairesBtn').onclick = genHoraires;
+    ['startTimeP1', 'durationP1', 'breakP1', 'lunchStart', 'lunchDuration', 'durationP2', 'breakP2'].forEach(id => {
+        document.getElementById(id).addEventListener('change', () => {
+            if (!currentUser) {
+                showMsg("Connectez-vous pour modifier les horaires");
+                // Réinitialiser les valeurs
+                applyTimeSettings();
+                return;
+            }
+            readTimeSettings();
+            saveData();
+        });
+    });
+    document.getElementById('nbTerrains').addEventListener('change', () => {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier le nombre de terrains");
+            document.getElementById('nbTerrains').value = nbTerrains;
+            return;
+        }
+        let v = parseInt(document.getElementById('nbTerrains').value);
+        nbTerrains = (v >= 3 && v <= 10) ? v : 6;
+        document.getElementById('nbTerrains').value = nbTerrains;
+        saveData();
+        renderSchedule();
+    });
+    document.getElementById('randomDrawCheck').addEventListener('change', () => {
+        if (!currentUser) {
+            showMsg("Connectez-vous pour modifier les options");
+            document.getElementById('randomDrawCheck').checked = randomMode;
+            return;
+        }
+        randomMode = document.getElementById('randomDrawCheck').checked;
+        saveData();
+    });
+
+    // Charger les données au démarrage
+    loadData();
+    updateCounters();
+    updateStatsRecap();
+    updateTopRecap();
+
+    // Masquer les boutons flottants si on n'est pas sur l'onglet phase2
+    if (document.querySelector('.tab.active').dataset.tab !== 'phase2') {
+        document.getElementById('scrollEliteBtn').style.display = 'none';
+        document.getElementById('scrollConsolBtn').style.display = 'none';
+    }
+
+    // Afficher le bandeau récap par défaut
+    document.getElementById('topRecap').style.display = 'flex';
+</script>
+</body>
+</html>
