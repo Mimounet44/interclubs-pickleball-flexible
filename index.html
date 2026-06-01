@@ -614,39 +614,30 @@ window.setRes = async function(r,w,m,f,v){
   const cur=ST.results[key]||{ga:'',gb:''};
   cur[f]=v===''?'':+v;
   ST.results[key]=cur;
-  if(cur.ga!==''&&cur.gb!=='') await saveResult(key, cur.ga, cur.gb);
+  await saveResult(key, cur.ga!==undefined?cur.ga:'', cur.gb!==undefined?cur.gb:'');
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// Saisie directe : met à jour la valeur en temps réel dès que c'est un entier valide
-window.scoreInput = function(el,r,w,m,f){
-  const raw=el.value.trim();
-  const v=raw===''?'':parseInt(raw,10);
-  if(raw!==''&&(isNaN(v)||v<0)){el.value='';return;}
-  const key=r+'-'+w+'-'+m;
-  const cur=ST.results[key]||{ga:'',gb:''};
-  cur[f]=v===''?'':v;
-  ST.results[key]=cur;
-  // Met à jour visuellement la couleur win/loss sans re-render complet
-  const other=f==='ga'?cur.gb:cur.ga;
-  if(v!==''&&other!==''){
-    el.classList.toggle('win-s',v>other);
-  } else {
-    el.classList.remove('win-s');
-  }
-};
-
-// Valide et sauvegarde quand on quitte le champ (blur ou Enter)
+// Appelé au blur (quitter le champ) — sauvegarde toujours, y compris si vide
 window.scoreCommit = async function(el,r,w,m,f){
-  const raw=el.value.trim();
-  const v=raw===''?'':parseInt(raw,10);
-  if(raw!==''&&(isNaN(v)||v<0)){el.value='';return;}
-  const key=r+'-'+w+'-'+m;
-  const cur=ST.results[key]||{ga:'',gb:''};
-  cur[f]=v===''?'':v;
-  ST.results[key]=cur;
-  // Toujours persister : supprime si les deux vides, sauvegarde sinon
-  await saveResult(key, cur.ga===undefined?'':cur.ga, cur.gb===undefined?'':cur.gb);
+  const raw = el.value === '' ? '' : el.value.trim();
+  const v   = raw === '' ? '' : parseInt(raw, 10);
+  // Valeur invalide → on remet vide
+  if(raw !== '' && (isNaN(v) || v < 0)){ el.value = ''; return; }
+
+  const key = r+'-'+w+'-'+m;
+  // Lire l'état actuel depuis ST.results (pas depuis le DOM qui peut être périmé)
+  const cur = { ga: '', gb: '', ...(ST.results[key]||{}) };
+  cur[f] = v;
+  ST.results[key] = cur;
+
+  // Toujours persister — saveResult supprime si ga==='' && gb===''
+  await saveResult(key,
+    cur.ga === undefined || cur.ga === null ? '' : cur.ga,
+    cur.gb === undefined || cur.gb === null ? '' : cur.gb
+  );
+
+  // Re-render APRÈS la sauvegarde
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
@@ -654,12 +645,12 @@ window.scoreCommit = async function(el,r,w,m,f){
 window.scoreNav = function(e,el){
   if(e.key==='Enter'||e.key==='Tab'){
     e.preventDefault();
-    // Trouver le prochain .sinp dans le DOM
     const allInputs=[...document.querySelectorAll('.sinp:not([readonly])')];
     const idx=allInputs.indexOf(el);
     const next=allInputs[idx+1];
-    if(next){next.focus();next.select();}
-    else{el.blur();scoreCommit(el,+el.dataset.rid,+el.dataset.wi,+el.dataset.mi,el.dataset.field);}
+    // blur déclenche onblur → scoreCommit automatiquement
+    el.blur();
+    if(next) setTimeout(()=>{ next.focus(); next.select(); }, 50);
   }
   if(e.key==='Escape') el.blur();
 };
@@ -1286,21 +1277,21 @@ function renderMatches(){
           class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
           ${isScorer()?`
             onfocus="this.select()"
-            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
-            onchange="scoreCommit(this,${ST.activeRound},${wi},${mi},'ga')"
+            onblur="scoreCommit(this,${ST.activeRound},${wi},${mi},'ga')"
             onkeydown="scoreNav(event,this)"
           `:'readonly'}
-          style="${!isScorer()?'cursor:default;opacity:.6':''}" data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga">
+          style="${!isScorer()?'cursor:default;opacity:.6':''}"
+          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga">
         <div class="vs-lbl">VS</div>
         <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99"
           class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
           ${isScorer()?`
             onfocus="this.select()"
-            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
-            onchange="scoreCommit(this,${ST.activeRound},${wi},${mi},'gb')"
+            onblur="scoreCommit(this,${ST.activeRound},${wi},${mi},'gb')"
             onkeydown="scoreNav(event,this)"
           `:'readonly'}
-          style="${!isScorer()?'cursor:default;opacity:.6':''}" data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb">
+          style="${!isScorer()?'cursor:default;opacity:.6':''}"
+          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb">
         <div class="mt-r">
           <div class="mt-court">TERRAIN ${mi+1}</div>
           <div class="mt-nm">${mkP(m.pB1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pB2)}</div>
