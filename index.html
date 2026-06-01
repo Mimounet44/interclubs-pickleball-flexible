@@ -447,27 +447,54 @@ async function auditLog(action, details){
 // MODIFICATION NOM JOUEUR (scorer + admin)
 // ══════════════════════════════════════════════════════════
 window.editPlayerName = async function(idx){
-  if(!isScorer()){ return; }
+  if(!isScorer()) return;
   const p = ST.players[idx];
   if(!p) return;
-  const newName = prompt('Nouveau nom pour ' + p.name + ' :', p.name);
-  if(!newName || newName.trim()==='' || newName.trim()===p.name) return;
-  ST.players[idx].name = newName.trim();
-  // Admin sauvegarde via tournament, scorer via un doc dédié
-  if(isAdmin()){
-    await saveTournament({ players: ST.players });
-  } else {
-    // Scorer : écriture dans playerEdits, l'admin voit les changements en temps réel
-    try {
-      await setDoc(doc(db,'tournament','current'),{
-        players: ST.players, updatedAt: serverTimestamp()
-      },{ merge:true });
-      await auditLog('edit_player_name',{ idx, oldName: p.name, newName: newName.trim() });
-    } catch(e){ alert('Erreur : '+e.message); }
+  // Trouver le span du nom dans le DOM et le remplacer par un input inline
+  const spans = document.querySelectorAll(`[data-playeridx="${idx}"]`);
+  const target = spans[0];
+  if(!target) {
+    // Fallback si pas de data-playeridx trouvé
+    const newName = prompt('Nouveau nom :', p.name);
+    if(!newName || !newName.trim() || newName.trim()===p.name) return;
+    await _savePlayerName(idx, newName.trim());
+    return;
   }
+  const oldName = p.name;
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = oldName;
+  inp.className = 'name-edit-inp';
+  inp.maxLength = 40;
+  inp.style.cssText = 'font-size:inherit;font-weight:inherit;font-family:inherit;background:var(--s1);border:2px solid var(--blu);border-radius:6px;color:var(--ink);padding:2px 6px;width:140px;outline:none';
+  target.replaceWith(inp);
+  inp.focus(); inp.select();
+  const commit = async () => {
+    const newName = inp.value.trim();
+    // Restaurer le span dans tous les cas
+    const span = document.createElement('span');
+    span.dataset.playeridx = idx;
+    span.textContent = newName || oldName;
+    inp.replaceWith(span);
+    if(newName && newName !== oldName) await _savePlayerName(idx, newName);
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+    if(e.key === 'Escape'){ inp.value = oldName; inp.blur(); }
+  });
+};
+async function _savePlayerName(idx, newName){
+  ST.players[idx].name = newName;
+  try {
+    await setDoc(doc(db,'tournament','current'),{
+      players: ST.players, updatedAt: serverTimestamp()
+    },{ merge:true });
+    await auditLog('edit_player_name',{ idx, newName });
+  } catch(e){ alert('Erreur : '+e.message); }
   renderPlayers();
   if(ST.page===4) renderMatches();
-};
+}
 
 // ══════════════════════════════════════════════════════════
 // NAVIGATION
@@ -618,41 +645,39 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// Appelé au blur (quitter le champ) — sauvegarde toujours, y compris si vide
-window.scoreCommit = async function(el,r,w,m,f){
-  const raw = el.value === '' ? '' : el.value.trim();
-  const v   = raw === '' ? '' : parseInt(raw, 10);
-  // Valeur invalide → on remet vide
+// ── Gestion scores : saisie libre, sauvegarde au blur ─────────
+// On ne re-render PAS pendant la frappe pour ne pas casser la saisie mobile.
+// Le re-render ne se fait qu'après saveResult (qui lui-même ne bloque pas).
+
+window.scoreCommit = async function(el, r, w, m, f){
+  const raw = el.value.trim();
+  // Accepte '' (effacement) ou un entier >= 0
+  const v = raw === '' ? '' : parseInt(raw, 10);
   if(raw !== '' && (isNaN(v) || v < 0)){ el.value = ''; return; }
 
   const key = r+'-'+w+'-'+m;
-  // Lire l'état actuel depuis ST.results (pas depuis le DOM qui peut être périmé)
-  const cur = { ga: '', gb: '', ...(ST.results[key]||{}) };
+  const cur = Object.assign({ ga:'', gb:'' }, ST.results[key]||{});
   cur[f] = v;
+  // Nettoie null/undefined
+  if(cur.ga == null) cur.ga = '';
+  if(cur.gb == null) cur.gb = '';
   ST.results[key] = cur;
 
-  // Toujours persister — saveResult supprime si ga==='' && gb===''
-  await saveResult(key,
-    cur.ga === undefined || cur.ga === null ? '' : cur.ga,
-    cur.gb === undefined || cur.gb === null ? '' : cur.gb
-  );
-
-  // Re-render APRÈS la sauvegarde
+  await saveResult(key, cur.ga, cur.gb);
+  // Re-render seulement APRÈS la sauvegarde, le DOM est alors cohérent
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// Navigation clavier : Entrée/Tab passe au champ suivant, Echap déselectionne
-window.scoreNav = function(e,el){
-  if(e.key==='Enter'||e.key==='Tab'){
+// Navigation : Enter/Tab → blur (qui déclenche scoreCommit via onblur) puis focus suivant
+window.scoreNav = function(e, el){
+  if(e.key === 'Enter' || e.key === 'Tab'){
     e.preventDefault();
-    const allInputs=[...document.querySelectorAll('.sinp:not([readonly])')];
-    const idx=allInputs.indexOf(el);
-    const next=allInputs[idx+1];
-    // blur déclenche onblur → scoreCommit automatiquement
-    el.blur();
-    if(next) setTimeout(()=>{ next.focus(); next.select(); }, 50);
+    const all = [...document.querySelectorAll('.sinp:not([readonly])')];
+    const next = all[all.indexOf(el) + 1];
+    el.blur(); // déclenche onblur → scoreCommit
+    if(next) setTimeout(() => { next.focus(); next.select(); }, 80);
   }
-  if(e.key==='Escape') el.blur();
+  if(e.key === 'Escape') el.blur();
 };
 
 window.setRound = async function(r){
@@ -1243,7 +1268,7 @@ function renderSubInfo(){
 
 function renderMatches(){
   const round=ST.schedule[ST.activeRound];const el=document.getElementById('mList');if(!round||!el)return;
-  const mkP=(id)=>{const p=pObj(id);return p?p.name:'?';};
+  const mkP=(id)=>{const p=pObj(id);const idx=ST.players.findIndex(x=>x.id===id);return p?`<span data-playeridx="${idx}">${p.name}</span>`:'?';};
   // Bouton substitution uniquement pour admin
   const mkSubBtn=(id)=>isAdmin()?`<button class="psub-btn" title="Remplacer ce joueur" onclick="openSub('${id}')">↔</button>`:'';
   // Bouton édition nom visible pour scorer+admin (en mode tournoi)
@@ -1273,7 +1298,7 @@ function renderMatches(){
           <div class="mt-nm">${mkP(m.pA1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pA2)}</div>
           <div class="mt-detail">${mkSubBtn(m.pA1)} ${mkEditBtn(m.pA1,idxA1)} ${mkP(m.pA1)} &nbsp;·&nbsp; ${mkSubBtn(m.pA2)} ${mkEditBtn(m.pA2,idxA2)} ${mkP(m.pA2)}</div>
         </div>
-        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99"
+        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
           class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
           ${isScorer()?`
             onfocus="this.select()"
@@ -1283,7 +1308,7 @@ function renderMatches(){
           style="${!isScorer()?'cursor:default;opacity:.6':''}"
           data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga">
         <div class="vs-lbl">VS</div>
-        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99"
+        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
           class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
           ${isScorer()?`
             onfocus="this.select()"
@@ -1604,8 +1629,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
 /* SCORE INPUT */
-.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;-moz-appearance:textfield;padding:0}
-.sinp::-webkit-outer-spin-button,.sinp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text}
 .sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18)}
 .sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
 .sinp::placeholder{color:var(--dim);font-size:20px}
