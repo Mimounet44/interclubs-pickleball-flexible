@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#3d3020">
-<title>🏓 Pickleball Americano v7</title>
+<title>🏓 Pickleball Americano v8</title>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ══════════════════════════════════════════════════════════
@@ -647,32 +647,28 @@ window.setRes = async function(r,w,m,f,v){
 
 // ── Focus : sélectionne tout le contenu et marque le champ pour réécriture ──
 window.scoreFocus = function(el){
-  // Marque le champ : la prochaine frappe remplacera la valeur entière
-  el._overwrite = true;
-  // select() pour desktop — sur mobile ça ne fait pas toujours qqch, mais ça ne nuit pas
+  el._pendingClear = true;   // vider au premier caractère tapé
+  el._prevValue = el.value;  // mémorise l'ancienne valeur (pour Escape)
+  // Desktop : sélectionne tout
   el.select();
-  // Fallback iOS : setSelectionRange après un micro-délai
   setTimeout(()=>{ try{ el.setSelectionRange(0, el.value.length); }catch(e){} }, 0);
+};
+
+// ── Touch : vide immédiatement au toucher (mobile) ──
+window.scoreTouchStart = function(el){
+  el._pendingClear = true;
+  el._prevValue = el.value;
+  // Sur mobile, vider AVANT que le clavier s'ouvre évite l'accumulation
+  el.value = '';
 };
 
 // ── Scores : mise à jour mémoire uniquement (pas de re-render) ──
 window.scoreInput = function(el, r, w, m, f){
-  // Mode réécriture : si le champ était focalisé et qu'on tape le premier chiffre,
-  // on remplace tout l'ancien contenu (comportement attendu sur mobile)
-  let raw = el.value.replace(/[^0-9]/g,'');
-  if(el._overwrite && raw.length > 1){
-    // Garde seulement le(s) nouveau(x) caractère(s) ajouté(s)
-    // Sur mobile, oninput peut donner "113" si l'ancienne valeur était "11" et on tape "3"
-    // On détecte le chiffre ajouté en fin de chaîne
-    const oldLen = (el._prevRaw || '').length;
-    if(raw.length > oldLen + 1){
-      // Plus d'un chiffre d'écart → l'utilisateur a tapé sur une valeur sélectionnée
-      raw = raw.slice(-(raw.length - oldLen)) || raw.slice(-1);
-    }
-  }
-  el._overwrite = false;
-  el._prevRaw = raw;
-  el.value = raw; // nettoie les caractères non numériques
+  // Nettoie : garde uniquement les chiffres, max 2
+  let raw = el.value.replace(/[^0-9]/g, '').slice(0, 2);
+  el.value = raw;
+  el._pendingClear = false;
+  el._prevValue = raw;
   const v = raw === '' ? '' : parseInt(raw, 10);
   const key = r+'-'+w+'-'+m;
   const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
@@ -707,7 +703,7 @@ window.scoreFlush = async function(r, w, m){
   await saveResult(key, cur.ga, cur.gb);
   // Après re-render, les anciens éléments sont détruits — reset quand même pour sécurité
   document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`).forEach(inp=>{
-    inp._overwrite = false; inp._prevRaw = inp.value;
+    inp._pendingClear = false; inp._prevValue = inp.value;
   });
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
@@ -737,10 +733,12 @@ window.scoreNav = function(e, el){
   }
   if(e.key === 'Escape'){
     clearTimeout(el._saveTimer);
-    // Remet la valeur sauvegardée
+    // Remet la valeur sauvegardée en Firebase (pas la valeur locale non encore flushée)
     const key = el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
     const cur = ST.results[key]||{};
     el.value = cur[el.dataset.field]!=null ? cur[el.dataset.field] : '';
+    el._pendingClear = false;
+    el._prevValue = el.value;
     el.blur();
   }
 };
@@ -1370,6 +1368,7 @@ function renderMatches(){
           class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           ${isScorer()?`
+            ontouchstart="scoreTouchStart(this)"
             onfocus="scoreFocus(this)"
             oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
             onkeydown="scoreNav(event,this)"
@@ -1381,6 +1380,7 @@ function renderMatches(){
           class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           ${isScorer()?`
+            ontouchstart="scoreTouchStart(this)"
             onfocus="scoreFocus(this)"
             oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
             onkeydown="scoreNav(event,this)"
