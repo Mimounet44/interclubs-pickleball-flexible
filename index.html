@@ -746,7 +746,6 @@ window.scoreCommit = function(){};
 window.scoreNav    = function(){};
 window.scoreFlush  = async function(){};
 
-function _scoreInputActive(){ return false; }
 function _updateScoreColors(r,w,m){
   const cur=ST.results[r+'-'+w+'-'+m]||{};
   const ga=cur.ga!=null&&cur.ga!==''?+cur.ga:null;
