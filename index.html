@@ -2,8 +2,12 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🏓 Pickleball Americano</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#3d3020">
+<title>🏓 Pickleball Americano v10</title>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ══════════════════════════════════════════════════════════
@@ -14,7 +18,7 @@ import { initializeApp }            from 'https://www.gstatic.com/firebasejs/10.
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword,
          createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider,
          signOut, updateProfile }   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection,
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection,
          addDoc, updateDoc, serverTimestamp, query, orderBy }
                                     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -168,9 +172,15 @@ function subscribeToTournamentPublic(){
     if(ST.schedule.length>0 && ST.page<4) goTo(4);
   });
 }
+function normalizeResult(data){
+  return { ga: data.ga==null?'':data.ga, gb: data.gb==null?'':data.gb };
+}
 function subscribeToResultsPublic(){
   unsubResults = onSnapshot(collection(db,'results'), (snap)=>{
-    snap.forEach(d=>{ ST.results[d.id]=d.data(); });
+    snap.docChanges().forEach(change=>{
+      if(change.type==='removed') delete ST.results[change.doc.id];
+      else ST.results[change.doc.id]=normalizeResult(change.doc.data());
+    });
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -331,8 +341,7 @@ window.adminDeleteUser = async function(uid, name){
   if(!isAdmin()){ alert('Admin uniquement.'); return; }
   if(!confirm(`Supprimer l'utilisateur "${name}" ?\nCette action est irréversible.`)) return;
   try {
-    const { deleteDoc, doc: doc2 } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    await deleteDoc(doc2(db,'users',uid));
+    await deleteDoc(doc(db,'users',uid));
     await auditLog('admin_delete_user',{ uid, name });
     // Supprimer aussi via la REST API Firebase Auth (nécessite un token admin — si indispo, on supprime juste Firestore)
     const msg = document.getElementById('userListMsg');
@@ -383,7 +392,10 @@ function subscribeToTournament(){
 }
 function subscribeToResults(){
   unsubResults = onSnapshot(collection(db,'results'), (snap)=>{
-    snap.forEach(d=>{ ST.results[d.id]=d.data(); });
+    snap.docChanges().forEach(change=>{
+      if(change.type==='removed') delete ST.results[change.doc.id];
+      else ST.results[change.doc.id]=normalizeResult(change.doc.data());
+    });
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -404,10 +416,19 @@ async function saveTournament(fields){
 async function saveResult(key, ga, gb){
   if(!isScorer()){ alert('Action réservée aux scorers et admins.'); return; }
   try {
-    await setDoc(doc(db,'results',key),{
-      ga, gb, savedAt: serverTimestamp(), savedBy: CURRENT_USER.uid
-    });
-    await auditLog('save_result',{ key, ga, gb });
+    if(ga===''&&gb===''){
+      // Les deux champs vidés → supprimer le document (annulation complète du score)
+      await deleteDoc(doc(db,'results',key));
+      await auditLog('delete_result',{ key });
+    } else {
+      await setDoc(doc(db,'results',key),{
+        ga: ga===''?null:ga,
+        gb: gb===''?null:gb,
+        savedAt: serverTimestamp(),
+        savedBy: CURRENT_USER.uid
+      });
+      await auditLog('save_result',{ key, ga, gb });
+    }
   } catch(e){ alert('Erreur sauvegarde score : '+e.message); }
 }
 
@@ -426,27 +447,54 @@ async function auditLog(action, details){
 // MODIFICATION NOM JOUEUR (scorer + admin)
 // ══════════════════════════════════════════════════════════
 window.editPlayerName = async function(idx){
-  if(!isScorer()){ return; }
+  if(!isScorer()) return;
   const p = ST.players[idx];
   if(!p) return;
-  const newName = prompt('Nouveau nom pour ' + p.name + ' :', p.name);
-  if(!newName || newName.trim()==='' || newName.trim()===p.name) return;
-  ST.players[idx].name = newName.trim();
-  // Admin sauvegarde via tournament, scorer via un doc dédié
-  if(isAdmin()){
-    await saveTournament({ players: ST.players });
-  } else {
-    // Scorer : écriture dans playerEdits, l'admin voit les changements en temps réel
-    try {
-      await setDoc(doc(db,'tournament','current'),{
-        players: ST.players, updatedAt: serverTimestamp()
-      },{ merge:true });
-      await auditLog('edit_player_name',{ idx, oldName: p.name, newName: newName.trim() });
-    } catch(e){ alert('Erreur : '+e.message); }
+  // Trouver le span du nom dans le DOM et le remplacer par un input inline
+  const spans = document.querySelectorAll(`[data-playeridx="${idx}"]`);
+  const target = spans[0];
+  if(!target) {
+    // Fallback si pas de data-playeridx trouvé
+    const newName = prompt('Nouveau nom :', p.name);
+    if(!newName || !newName.trim() || newName.trim()===p.name) return;
+    await _savePlayerName(idx, newName.trim());
+    return;
   }
+  const oldName = p.name;
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = oldName;
+  inp.className = 'name-edit-inp';
+  inp.maxLength = 40;
+  inp.style.cssText = 'font-size:inherit;font-weight:inherit;font-family:inherit;background:var(--s1);border:2px solid var(--blu);border-radius:6px;color:var(--ink);padding:2px 6px;width:140px;outline:none';
+  target.replaceWith(inp);
+  inp.focus(); inp.select();
+  const commit = async () => {
+    const newName = inp.value.trim();
+    // Restaurer le span dans tous les cas
+    const span = document.createElement('span');
+    span.dataset.playeridx = idx;
+    span.textContent = newName || oldName;
+    inp.replaceWith(span);
+    if(newName && newName !== oldName) await _savePlayerName(idx, newName);
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+    if(e.key === 'Escape'){ inp.value = oldName; inp.blur(); }
+  });
+};
+async function _savePlayerName(idx, newName){
+  ST.players[idx].name = newName;
+  try {
+    await setDoc(doc(db,'tournament','current'),{
+      players: ST.players, updatedAt: serverTimestamp()
+    },{ merge:true });
+    await auditLog('edit_player_name',{ idx, newName });
+  } catch(e){ alert('Erreur : '+e.message); }
   renderPlayers();
   if(ST.page===4) renderMatches();
-};
+}
 
 // ══════════════════════════════════════════════════════════
 // NAVIGATION
@@ -593,9 +641,201 @@ window.setRes = async function(r,w,m,f,v){
   const cur=ST.results[key]||{ga:'',gb:''};
   cur[f]=v===''?'':+v;
   ST.results[key]=cur;
-  if(cur.ga!==''&&cur.gb!=='') await saveResult(key, cur.ga, cur.gb);
+  await saveResult(key, cur.ga!=null?cur.ga:'', cur.gb!=null?cur.gb:'');
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
+
+// ══════════════════════════════════════════════════════════
+// PAVÉ NUMÉRIQUE CUSTOM (mobile) + INPUT CLASSIQUE (desktop)
+// ══════════════════════════════════════════════════════════
+
+// Détecte si on est sur un appareil touch
+function isTouchDevice(){ return ('ontouchstart' in window) || navigator.maxTouchPoints > 0; }
+
+// État du pavé numérique
+const NP = { el:null, r:0, w:0, m:0, f:'', val:'' };
+
+// Crée le pavé numérique dans le DOM (une seule fois)
+function createNumpad(){
+  if(document.getElementById('scoreNumpad')) return;
+  const d = document.createElement('div');
+  d.id = 'scoreNumpad';
+  d.innerHTML = `
+    <div id="npOverlay"></div>
+    <div id="npPanel">
+      <div id="npLabel"></div>
+      <div id="npDisplay">–</div>
+      <div id="npGrid">
+        ${[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>`
+          <button class="npk ${k==='✓'?'npk-ok':k==='⌫'?'npk-del':''}" data-k="${k}">${k}</button>
+        `).join('')}
+      </div>
+      <button id="npCancel">Annuler</button>
+    </div>`;
+  document.body.appendChild(d);
+
+  // Gestion touches — touchend prioritaire pour éviter double-fire iOS
+  function npHandleKey(k){
+    if(k === '⌫'){
+      NP.val = String(NP.val).slice(0,-1);
+    } else if(k === '✓'){
+      npConfirm();
+      return;
+    } else {
+      if(String(NP.val).length < 2) NP.val = String(NP.val) + String(k);
+    }
+    document.getElementById('npDisplay').textContent = String(NP.val) === '' ? '–' : String(NP.val);
+  }
+  let _npTouchFired = false;
+  document.getElementById('npGrid').addEventListener('touchend', e=>{
+    e.preventDefault();
+    _npTouchFired = true;
+    setTimeout(()=>{ _npTouchFired = false; }, 400);
+    const btn = e.target.closest('.npk'); if(!btn) return;
+    npHandleKey(btn.dataset.k);
+  });
+  document.getElementById('npGrid').addEventListener('click', e=>{
+    if(_npTouchFired) return;
+    const btn = e.target.closest('.npk'); if(!btn) return;
+    npHandleKey(btn.dataset.k);
+  });
+
+  document.getElementById('npCancel').addEventListener('click', npClose);
+  document.getElementById('npOverlay').addEventListener('click', npClose);
+}
+
+function npOpen(r, w, m, f, currentVal, labelHTML){
+  createNumpad();
+  NP.r=r; NP.w=w; NP.m=m; NP.f=f;
+  // Lire la valeur fraîche depuis ST.results (ignore currentVal passé en param)
+  const _s = ST.results[r+'-'+w+'-'+m]||{};
+  const _v = _s[f];
+  NP.val = (_v !== '' && _v != null) ? String(_v) : '';
+  document.getElementById('npLabel').innerHTML = labelHTML;
+  document.getElementById('npDisplay').textContent = NP.val === '' ? '–' : NP.val;
+  document.getElementById('scoreNumpad').classList.add('np-open');
+  // Empêche le scroll en arrière-plan
+  document.body.style.overflow = 'hidden';
+}
+
+function npClose(){
+  const np = document.getElementById('scoreNumpad');
+  if(np) np.classList.remove('np-open');
+  document.body.style.overflow = '';
+}
+
+async function npConfirm(){
+  const {r,w,m,f} = NP;
+  const key = r+'-'+w+'-'+m;
+  // Lire l'état actuel depuis ST.results (synchronisé avec Firebase)
+  const saved = ST.results[key]||{};
+  const ga_saved = saved.ga!=null ? saved.ga : '';
+  const gb_saved = saved.gb!=null ? saved.gb : '';
+  // Nouvelle valeur saisie
+  const v = String(NP.val) === '' ? '' : parseInt(String(NP.val), 10);
+  // Construire le résultat en préservant l'autre champ
+  const new_ga = f==='ga' ? v : ga_saved;
+  const new_gb = f==='gb' ? v : gb_saved;
+  // Mettre à jour la mémoire locale
+  ST.results[key] = { ga: new_ga, gb: new_gb };
+  npClose();
+  await saveResult(key, new_ga, new_gb);
+  renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
+}
+
+// ── Focus : sélectionne tout le contenu (desktop uniquement) ──
+window.scoreFocus = function(el){
+  el.select();
+  setTimeout(()=>{ try{ el.setSelectionRange(0, el.value.length); }catch(e){} }, 0);
+};
+
+// ── Touch : ouvre le pavé numérique au lieu du clavier natif ──
+window.scoreTap = function(el, r, w, m, f){
+  if(!isScorer()) return;
+  el.blur();
+  const key = r+'-'+w+'-'+m;
+  const cur = ST.results[key]||{ga:'',gb:''};
+  const teamLabel = f==='ga' ? 'Score A' : 'Score B';
+  const otherF = f==='ga' ? 'gb' : 'ga';
+  const otherNum = f==='ga' ? 'B' : 'A';
+  const otherVal = (cur[otherF]!=null && cur[otherF]!=='') ? cur[otherF] : '–';
+  const otherLabel = `Score ${otherNum} : <strong>${otherVal}</strong>`;
+  npOpen(r, w, m, f, null, `${teamLabel} &nbsp;·&nbsp; ${otherLabel}`);
+};
+  const teamLabel = f==='ga' ? 'Équipe A (gauche)' : 'Équipe B (droite)';
+  const cur2 = ST.results[key]||{ga:'',gb:''};
+  const otherVal = f==='ga' ? (cur2.gb!=null?cur2.gb:'') : (cur2.ga!=null?cur2.ga:'');
+  const otherLabel = f==='ga' ? `Score B : <strong>${otherVal!==''?otherVal:'–'}</strong>` : `Score A : <strong>${otherVal!==''?otherVal:'–'}</strong>`;
+  npOpen(r, w, m, f, null, `${teamLabel} &nbsp;·&nbsp; ${otherLabel}`);
+};
+
+// ── Scores : saisie clavier desktop ──
+window.scoreInput = function(el, r, w, m, f){
+  if(isTouchDevice()) return; // ignoré sur touch, géré par scoreTap
+  let raw = el.value.replace(/[^0-9]/g, '').slice(0, 2);
+  el.value = raw;
+  const v = raw === '' ? '' : parseInt(raw, 10);
+  const key = r+'-'+w+'-'+m;
+  const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
+  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
+  cur[f] = v;
+  ST.results[key] = cur;
+  const other = f==='ga' ? cur.gb : cur.ga;
+  if(v!=='' && other!==''){
+    el.classList.toggle('win-s', v > other);
+    const matchInputs = [...document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`)];
+    const otherEl = matchInputs.find(x => x.dataset.field !== f);
+    if(otherEl) otherEl.classList.toggle('win-s', other > v);
+  } else {
+    el.classList.remove('win-s');
+  }
+  clearTimeout(el._saveTimer);
+  el._saveTimer = setTimeout(() => scoreFlush(r, w, m), 800);
+};
+
+// ── Sauvegarde + re-render ──
+window.scoreFlush = async function(r, w, m){
+  const key = r+'-'+w+'-'+m;
+  const cur = ST.results[key]||{ga:'',gb:''};
+  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
+  document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
+    clearTimeout(el._saveTimer);
+  });
+  await saveResult(key, cur.ga, cur.gb);
+  renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
+};
+
+// ── Navigation clavier (desktop) ──
+window.scoreNav = function(e, el){
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    clearTimeout(el._saveTimer);
+    const r=+el.dataset.rid, w=+el.dataset.wi, m=+el.dataset.mi;
+    scoreFlush(r, w, m).then(()=>{
+      const all = [...document.querySelectorAll('.sinp:not([readonly])')];
+      if(all.length > 0) all[0].focus();
+    });
+  }
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    const all = [...document.querySelectorAll('.sinp:not([readonly])')];
+    const next = all[all.indexOf(el)+1];
+    if(next){ next.focus(); next.select(); }
+    else {
+      clearTimeout(el._saveTimer);
+      scoreFlush(+el.dataset.rid, +el.dataset.wi, +el.dataset.mi);
+    }
+  }
+  if(e.key === 'Escape'){
+    clearTimeout(el._saveTimer);
+    const key = el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
+    const cur = ST.results[key]||{};
+    el.value = cur[el.dataset.field]!=null ? cur[el.dataset.field] : '';
+    el.blur();
+  }
+};
+
+window.scoreCommit = function(el,r,w,m,f){ scoreFlush(r,w,m); };
 
 window.setRound = async function(r){
   ST.activeRound=r;
@@ -741,6 +981,108 @@ function pk(a,b){return a<b?a+'-'+b:b+'-'+a;}
 function pLv(id){const p=ST.players.find(x=>x.id===id);return p?p.lv:3;}
 function pGender(id){const p=ST.players.find(x=>x.id===id);return p?p.g:'M';}
 
+// ─────────────────────────────────────────────────────────────
+// SCORE D'UN MATCH — pénalités/récompenses (plus bas = mieux)
+// ─────────────────────────────────────────────────────────────
+function matchScore(pA1,pA2,pB1,pB2,bal){
+  let sc=0;
+  const lA1=pLv(pA1),lA2=pLv(pA2),lB1=pLv(pB1),lB2=pLv(pB2);
+  const gA1=pGender(pA1),gA2=pGender(pA2),gB1=pGender(pB1),gB2=pGender(pB2);
+
+  if(bal==='level'||bal==='both'){
+    // Pénalité si partenaires de niveaux trop différents
+    sc+=Math.abs(lA1-lA2)*90;
+    sc+=Math.abs(lB1-lB2)*90;
+    // Pénalité forte si les deux équipes ont un écart de niveau total (évite deb vs elite)
+    sc+=Math.abs((lA1+lA2)-(lB1+lB2))*150;
+    // Pénalité supplémentaire si un débutant (lv=1) est opposé à un élite (lv=5)
+    const minA=Math.min(lA1,lA2),maxA=Math.max(lA1,lA2);
+    const minB=Math.min(lB1,lB2),maxB=Math.max(lB1,lB2);
+    if(minA<=1&&maxB>=5) sc+=500;
+    if(minB<=1&&maxA>=5) sc+=500;
+  }
+
+  if(bal==='gender'||bal==='both'){
+    const mixA=(gA1==='M'&&gA2==='F')||(gA1==='F'&&gA2==='M');
+    const mixB=(gB1==='M'&&gB2==='F')||(gB1==='F'&&gB2==='M');
+    const gs=[gA1,gA2,gB1,gB2];
+    const nM=gs.filter(g=>g==='M').length;
+    const nF=gs.filter(g=>g==='F').length;
+    // Forte récompense par paire mixte
+    if(mixA) sc-=700;
+    if(mixB) sc-=700;
+    // Pénalité asymétrie (une paire mixte, l'autre non)
+    if(mixA!==mixB) sc+=350;
+    // Si le groupe contient assez de H et F pour être mixte partout → obligation
+    if(nM>=2&&nF>=2){
+      if(!mixA) sc+=1000;
+      if(!mixB) sc+=1000;
+    }
+  }
+  return sc;
+}
+
+// Renvoie true si la contrainte mixité stricte est satisfaite
+function isMixForced(pA1,pA2,pB1,pB2){
+  const gs=[pGender(pA1),pGender(pA2),pGender(pB1),pGender(pB2)];
+  const nM=gs.filter(g=>g==='M').length,nF=gs.filter(g=>g==='F').length;
+  if(nM<2||nF<2) return true;
+  const mixA=(gs[0]!==gs[1])&&(gs[0]==='M'||gs[0]==='F')&&(gs[1]==='M'||gs[1]==='F');
+  const mixB=(gs[2]!==gs[3])&&(gs[2]==='M'||gs[2]==='F')&&(gs[3]==='M'||gs[3]==='F');
+  return mixA&&mixB;
+}
+
+// ─────────────────────────────────────────────────────────────
+// FORMATION DU GROUPE OPTIMISÉ (mixité + niveau) avant tirage
+// Construit un groupe de N joueurs depuis un pool en cherchant
+// la meilleure répartition H/F et niveaux pour les terrains
+// ─────────────────────────────────────────────────────────────
+function buildOptimalGroup(pool, n, bal){
+  if(pool.length<=n) return [...pool];
+  // On cherche parmi plusieurs tentatives le groupe de n joueurs
+  // dont le score global de matchs possibles est le meilleur
+  // (on simule le meilleur appariement possible pour chaque combinaison)
+  // Pour des raisons de performance on essaie des groupes guidés
+  let bestGroup=null, bestSc=Infinity;
+  const attempts=30;
+  for(let att=0;att<attempts;att++){
+    let candidate;
+    if(bal==='both'||bal==='gender'){
+      // Construire un groupe en alternant H et F selon disponibilité
+      const males=shuffle(pool.filter(p=>p.g==='M'));
+      const females=shuffle(pool.filter(p=>p.g==='F'));
+      const others=shuffle(pool.filter(p=>p.g==='X'));
+      candidate=[];
+      const perTerrain=4, nT=n/4;
+      // Pour chaque terrain vouloir 2H+2F si possible
+      const wantM=Math.min(nT*2,males.length);
+      const wantF=Math.min(nT*2,females.length);
+      for(let i=0;i<wantM;i++) candidate.push(males[i]);
+      for(let i=0;i<wantF;i++) candidate.push(females[i]);
+      // Compléter avec les autres genres si pas assez
+      let extra=[...males.slice(wantM),...females.slice(wantF),...others];
+      shuffle(extra);
+      while(candidate.length<n&&extra.length>0) candidate.push(extra.shift());
+      if(candidate.length<n) break;
+    } else {
+      candidate=shuffle([...pool]).slice(0,n);
+    }
+    // Évalue le score global théorique de ce groupe
+    const ids=candidate.map(p=>p.id);
+    let sc=0;
+    // Paires naïves pour évaluation rapide
+    for(let i=0;i<ids.length;i+=4){
+      if(i+3>=ids.length) break;
+      sc+=matchScore(ids[i],ids[i+1],ids[i+2],ids[i+3],bal);
+    }
+    if(sc<bestSc){bestSc=sc;bestGroup=candidate;}
+  }
+  return bestGroup||shuffle([...pool]).slice(0,n);
+}
+
+// ─────────────────────────────────────────────────────────────
+// VALIDATION D'UN MATCH selon le mode relax
+// ─────────────────────────────────────────────────────────────
 function isMatchValid(pA1,pA2,pB1,pB2,pairCount,oppCount,lastPartnerRound,currentRound){
   if((pairCount[pk(pA1,pA2)]||0)>=1)return false;
   if((pairCount[pk(pB1,pB2)]||0)>=1)return false;
@@ -749,37 +1091,79 @@ function isMatchValid(pA1,pA2,pB1,pB2,pairCount,oppCount,lastPartnerRound,curren
   for(const[x,y]of opps){const lastP=lastPartnerRound[pk(x,y)];if(lastP!==undefined&&currentRound-lastP<=1)return false;}
   return true;
 }
-function matchScore(pA1,pA2,pB1,pB2,bal){
-  let sc=0;
-  if(bal==='level'||bal==='both'){const lA1=pLv(pA1),lA2=pLv(pA2),lB1=pLv(pB1),lB2=pLv(pB2);sc+=Math.abs(lA1-lA2)*80;sc+=Math.abs(lB1-lB2)*80;sc+=Math.abs((lA1+lA2)-(lB1+lB2))*120;}
-  if(bal==='gender'||bal==='both'){const gA1=pGender(pA1),gA2=pGender(pA2),gB1=pGender(pB1),gB2=pGender(pB2);if(gA1!==gA2)sc-=300;if(gB1!==gB2)sc-=300;if((gA1!==gA2)!==(gB1!==gB2))sc+=200;}
-  return sc;
-}
+
+// ─────────────────────────────────────────────────────────────
+// GÉNÉRATION DES MATCHS pour un groupe
+// Cherche la meilleure combinaison : rotation + mixité + niveau
+// ─────────────────────────────────────────────────────────────
 function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRound,cfg){
   if(group.length<4)return[];
   const n=group.length,bal=cfg.bal;
+  const strictGender=(bal==='gender'||bal==='both');
+  const strictLevel=(bal==='level'||bal==='both');
+
   for(let relaxMode=0;relaxMode<=3;relaxMode++){
+    const enforceGender=strictGender&&relaxMode<3;
     let bestMatches=null,bestScore=Infinity;
-    for(let attempt=0;attempt<12;attempt++){
-      const shuffled=shuffle(group);const used=new Set();const matches=[];let sc=0,ok=true;
+    const maxAttempts=relaxMode===0?30:15;
+
+    for(let attempt=0;attempt<maxAttempts;attempt++){
+      // Trier le groupe selon mixité+niveau avant de l'explorer
+      let sorted;
+      if(bal==='both'||bal==='gender'){
+        // Interleave H et F triés par niveau décroissant
+        const ms=shuffle(group.filter(id=>pGender(id)==='M')).sort((a,b)=>pLv(b)-pLv(a));
+        const fs=shuffle(group.filter(id=>pGender(id)==='F')).sort((a,b)=>pLv(b)-pLv(a));
+        const xs=shuffle(group.filter(id=>pGender(id)==='X')).sort((a,b)=>pLv(b)-pLv(a));
+        sorted=[];
+        const ml=Math.max(ms.length,fs.length,xs.length);
+        for(let i=0;i<ml;i++){if(i<ms.length)sorted.push(ms[i]);if(i<fs.length)sorted.push(fs[i]);if(i<xs.length)sorted.push(xs[i]);}
+      } else if(bal==='level'){
+        // Tri serpentin par niveau (meilleur+pire ensemble)
+        const byLv=[...group].sort((a,b)=>pLv(b)-pLv(a));
+        sorted=[];const half=Math.floor(byLv.length/2);
+        for(let i=0;i<half;i++){sorted.push(byLv[i]);sorted.push(byLv[byLv.length-1-i]);}
+        if(byLv.length%2) sorted.push(byLv[half]);
+      } else {
+        sorted=shuffle(group);
+      }
+
+      const used=new Set();const matches=[];let sc=0,ok=true;
       while(true){
-        const avail=shuffled.filter(id=>!used.has(id));if(avail.length<4)break;
+        const avail=sorted.filter(id=>!used.has(id));
+        if(avail.length<4)break;
         const a1=avail[0];let bestM=null,bestMSc=Infinity;
-        for(let i=1;i<avail.length;i++){const a2=avail[i];
-          for(let j=1;j<avail.length;j++){if(j===i)continue;const b1=avail[j];
-            for(let k=j+1;k<avail.length;k++){if(k===i)continue;const b2=avail[k];
+
+        for(let i=1;i<avail.length;i++){
+          const a2=avail[i];
+          for(let j=1;j<avail.length;j++){
+            if(j===i)continue;const b1=avail[j];
+            for(let k=j+1;k<avail.length;k++){
+              if(k===i)continue;const b2=avail[k];
               let valid=true;
-              if(relaxMode===0)valid=isMatchValid(a1,a2,b1,b2,pairCount,oppCount,lastPartnerRound,currentRound);
-              else if(relaxMode===1){if((pairCount[pk(a1,a2)]||0)>=1||(pairCount[pk(b1,b2)]||0)>=1)valid=false;else{const opps=[[a1,b1],[a1,b2],[a2,b1],[a2,b2]];for(const[x,y]of opps)if((oppCount[pk(x,y)]||0)>=1){valid=false;break;}}}
-              else if(relaxMode===2){if((pairCount[pk(a1,a2)]||0)>=1||(pairCount[pk(b1,b2)]||0)>=1)valid=false;}
+              if(relaxMode===0) valid=isMatchValid(a1,a2,b1,b2,pairCount,oppCount,lastPartnerRound,currentRound);
+              else if(relaxMode===1){
+                if((pairCount[pk(a1,a2)]||0)>=1||(pairCount[pk(b1,b2)]||0)>=1)valid=false;
+                else{const opps=[[a1,b1],[a1,b2],[a2,b1],[a2,b2]];for(const[x,y]of opps)if((oppCount[pk(x,y)]||0)>=1){valid=false;break;}}
+              }
+              else if(relaxMode>=2){
+                if((pairCount[pk(a1,a2)]||0)>=1||(pairCount[pk(b1,b2)]||0)>=1)valid=false;
+              }
+              // Mixité obligatoire si possible
+              if(valid&&enforceGender) valid=isMixForced(a1,a2,b1,b2);
               if(!valid)continue;
-              const msc=matchScore(a1,a2,b1,b2,bal);if(msc<bestMSc){bestMSc=msc;bestM={pA1:a1,pA2:a2,pB1:b1,pB2:b2};}
-            }}}
+              const msc=matchScore(a1,a2,b1,b2,bal);
+              if(msc<bestMSc){bestMSc=msc;bestM={pA1:a1,pA2:a2,pB1:b1,pB2:b2};}
+            }
+          }
+        }
         if(!bestM){ok=false;break;}
-        matches.push(bestM);sc+=bestMSc;[bestM.pA1,bestM.pA2,bestM.pB1,bestM.pB2].forEach(id=>used.add(id));
+        matches.push(bestM);sc+=bestMSc;
+        [bestM.pA1,bestM.pA2,bestM.pB1,bestM.pB2].forEach(id=>used.add(id));
       }
       if(ok&&matches.length*4===n&&sc<bestScore){bestScore=sc;bestMatches=matches;}
     }
+
     if(bestMatches&&bestMatches.length*4===n){
       if(relaxMode>0)bestMatches.forEach(m=>{m._relaxed=relaxMode;});
       bestMatches.forEach(m=>{
@@ -794,7 +1178,22 @@ function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRoun
   return[];
 }
 
-function buildSchedule(maxAttempts=8){
+// ─────────────────────────────────────────────────────────────
+// TRI DES REMPLAÇANTS : équité d'abord, niveau faible ensuite
+// ─────────────────────────────────────────────────────────────
+function sortForSubs(ids,playCount,byeCount){
+  return [...ids].sort((a,b)=>{
+    // 1. Moins de matchs joués → remplaçant en priorité
+    if(playCount[b]!==playCount[a]) return playCount[b]-playCount[a];
+    // 2. Déjà plus souvent remplaçant → moins prioritaire cette fois
+    if(byeCount[a]!==byeCount[b]) return byeCount[a]-byeCount[b];
+    // 3. Niveau le plus faible → remplaçant en priorité (débutants d'abord)
+    if(pLv(a)!==pLv(b)) return pLv(a)-pLv(b);
+    return Math.random()-.5;
+  });
+}
+
+function buildSchedule(maxAttempts=16){
   const cfg=getCfg();if(cfg.n<4){alert('Il faut au moins 4 joueurs.');return false;}
   ST.cfg=cfg;
   const N=cfg.n,T=cfg.t,R=cfg.r,rem=N%4,activeN=N-rem;
@@ -821,12 +1220,15 @@ function buildSchedule(maxAttempts=8){
     const earlyPlayedInRound={};
 
     for(let r=0;r<R;r++){
-      // ── Remplaçants : prioriser ceux qui ont le plus joué, puis qui ont le moins reposé
+      // ── Remplaçants : 1) le moins de matchs joués, 2) le plus de byes déjà subis,
+      //    3) niveau le plus faible (débutants remplaçants en priorité), 4) aléatoire
       let subs=[];
       if(rem>0){
         const sorted=[...orderedIds].sort((a,b)=>{
           if(playCount[b]!==playCount[a])return playCount[b]-playCount[a];
           if(byeCount[a]!==byeCount[b])return byeCount[a]-byeCount[b];
+          // priorité aux joueurs de plus faible niveau (débutants d'abord)
+          if(pLv(a)!==pLv(b))return pLv(a)-pLv(b);
           return Math.random()-.5;
         });
         subs=sorted.slice(0,rem);
@@ -870,6 +1272,7 @@ function buildSchedule(maxAttempts=8){
           const sorted=[...orderedIds].sort((a,b)=>{
             if(playCount[b]!==playCount[a])return playCount[b]-playCount[a];
             if(byeCount[a]!==byeCount[b])return byeCount[a]-byeCount[b];
+            if(pLv(a)!==pLv(b))return pLv(a)-pLv(b);
             return 0;
           });
           sorted.slice(0,rem).forEach(id=>futureSubs.add(id));
@@ -1022,7 +1425,7 @@ function renderSubInfo(){
 
 function renderMatches(){
   const round=ST.schedule[ST.activeRound];const el=document.getElementById('mList');if(!round||!el)return;
-  const mkP=(id)=>{const p=pObj(id);return p?p.name:'?';};
+  const mkP=(id)=>{const p=pObj(id);const idx=ST.players.findIndex(x=>x.id===id);return p?`<span data-playeridx="${idx}">${p.name}</span>`:'?';};
   // Bouton substitution uniquement pour admin
   const mkSubBtn=(id)=>isAdmin()?`<button class="psub-btn" title="Remplacer ce joueur" onclick="openSub('${id}')">↔</button>`:'';
   // Bouton édition nom visible pour scorer+admin (en mode tournoi)
@@ -1052,13 +1455,31 @@ function renderMatches(){
           <div class="mt-nm">${mkP(m.pA1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pA2)}</div>
           <div class="mt-detail">${mkSubBtn(m.pA1)} ${mkEditBtn(m.pA1,idxA1)} ${mkP(m.pA1)} &nbsp;·&nbsp; ${mkSubBtn(m.pA2)} ${mkEditBtn(m.pA2,idxA2)} ${mkP(m.pA2)}</div>
         </div>
-        <input type="number" min="0" class="sinp ${aW?'win-s':''}" value="${res.ga}" placeholder="–"
-          ${isScorer()?`oninput="setRes(${ST.activeRound},${wi},${mi},'ga',this.value)"`:' readonly'}
-          style="${!isScorer()?'cursor:default;background:var(--s2)':''}">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+          class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
+        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+          class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          ${isScorer()?`
+            ontouchstart="event.preventDefault();scoreTap(this,${ST.activeRound},${wi},${mi},'ga')"
+            onfocus="scoreFocus(this)"
+            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
+            onkeydown="scoreNav(event,this)"
+          `:'readonly'}
+          style="${!isScorer()?'cursor:default;opacity:.6':''}"
+          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga" data-match="${ST.activeRound}-${wi}-${mi}">
         <div class="vs-lbl">VS</div>
-        <input type="number" min="0" class="sinp ${bW?'win-s':''}" value="${res.gb}" placeholder="–"
-          ${isScorer()?`oninput="setRes(${ST.activeRound},${wi},${mi},'gb',this.value)"`:' readonly'}
-          style="${!isScorer()?'cursor:default;background:var(--s2)':''}">
+        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+          class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          ${isScorer()?`
+            ontouchstart="event.preventDefault();scoreTap(this,${ST.activeRound},${wi},${mi},'gb')"
+            onfocus="scoreFocus(this)"
+            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
+            onkeydown="scoreNav(event,this)"
+          `:'readonly'}
+          style="${!isScorer()?'cursor:default;opacity:.6':''}"
+          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb" data-match="${ST.activeRound}-${wi}-${mi}">
         <div class="mt-r">
           <div class="mt-court">TERRAIN ${mi+1}</div>
           <div class="mt-nm">${mkP(m.pB1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pB2)}</div>
@@ -1100,7 +1521,15 @@ document.addEventListener('DOMContentLoaded',()=>{
 function computeStandings(){
   const stats={};
   ST.players.slice(0,ST.cfg.n).forEach(p=>{stats[p.id]={id:p.id,name:p.name,g:p.g,lv:p.lv,pts:0,w:0,d:0,l:0,gf:0,ga:0,played:0,byeTours:0,h2h:{}};});
-  ST.schedule.forEach(rd=>rd.subs.forEach(id=>{if(stats[id])stats[id].byeTours++;}));
+  // Compensation bye : chaque tour en tant que remplaçant = +2 pts (match nul fictif 0-0)
+  ST.schedule.forEach(rd=>rd.subs.forEach(id=>{
+    if(!stats[id])return;
+    stats[id].byeTours++;
+    stats[id].pts+=2;   // équivalent match nul
+    stats[id].d++;      // compté comme nul
+    stats[id].played++; // compté comme match joué
+    // gf et ga restent à 0 (score fictif 0-0)
+  }));
   ST.schedule.forEach((round,r)=>round.waves.forEach((wv,w)=>wv.matches.forEach((m,mi)=>{
     const res=getRes(r,w,mi);if(res.ga===''||res.gb==='')return;
     const ga=+res.ga,gb=+res.gb;
@@ -1116,7 +1545,7 @@ function stblHTML(arr,limit){
   const showBye=arr.some(s=>s.byeTours>0);
   const rows=(limit?arr.slice(0,limit):arr).map((s,i)=>{
     const gd=s.gf-s.ga;
-    return `<tr><td class="rank-c" style="color:${i<3?'var(--grn)':'var(--dim)'}">${med[i]||i+1}</td><td><span class="p-ico">${s.g==='M'?'♂':s.g==='F'?'♀':'⚧'}</span> ${s.name}${s.byeTours>0?` <span class="sub-badge">🟡×${s.byeTours}</span>`:''}</td><td class="played-c">${s.played}</td><td class="wc">${s.w}</td><td class="dc">${s.d}</td><td class="lc">${s.l}</td><td>${s.gf}</td><td>${s.ga}</td><td class="${gd>=0?'gdp':'gdn'}">${gd>0?'+':''}${gd}</td><td class="pts-c">${s.pts}</td></tr>`;
+    return `<tr><td class="rank-c" style="color:${i<3?'var(--grn)':'var(--dim)'}">${med[i]||i+1}</td><td><span class="p-ico">${s.g==='M'?'♂':s.g==='F'?'♀':'⚧'}</span> ${s.name}${s.byeTours>0?` <span class="sub-badge" title="${s.byeTours} tour(s) au repos · +${s.byeTours*2} pts de compensation">🟡×${s.byeTours}</span>`:''}</td><td class="played-c">${s.played}</td><td class="wc">${s.w}</td><td class="dc">${s.d}</td><td class="lc">${s.l}</td><td>${s.gf}</td><td>${s.ga}</td><td class="${gd>=0?'gdp':'gdn'}">${gd>0?'+':''}${gd}</td><td class="pts-c">${s.pts}</td></tr>`;
   }).join('');
   return `<thead><tr><th>#</th><th style="text-align:left">Joueur</th><th title="Matchs joués">J</th><th style="color:var(--grn)">V</th><th style="color:var(--ylw)">N</th><th style="color:var(--red)">D</th><th>BP</th><th>BC</th><th>+/-</th><th style="color:var(--grn)">Pts</th></tr></thead><tbody>${rows}</tbody>`;
 }
@@ -1226,9 +1655,26 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--ink);min-he
 .hdr{background:var(--ink2);color:#fff;padding:0 20px;height:58px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:300;box-shadow:0 3px 20px rgba(0,0,0,.3)}
 .hdr-brand{font-family:'Oswald',sans-serif;font-size:22px;letter-spacing:2px;color:#ffd080;display:flex;align-items:center;gap:8px}
 .hdr-user{font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
-.hdr-r{margin-left:auto;display:flex;gap:8px}
-.hdr-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:600;transition:all .15s;letter-spacing:.3px}
+.hdr-r{margin-left:auto;display:flex;gap:8px;align-items:center}
+.hdr-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:600;transition:all .15s;letter-spacing:.3px;min-height:36px}
 .hdr-btn:hover{background:rgba(255,255,255,.22)}
+/* HAMBURGER */
+.hdr-menu-btn{display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:42px;height:42px;border-radius:8px;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0;flex-shrink:0;transition:background .15s}
+.hdr-menu-btn:hover{background:rgba(255,255,255,.25)}
+.hdr-menu-btn span{display:block;width:20px;height:2px;background:#fff;border-radius:2px;transition:all .25s}
+.hdr-menu-btn.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.hdr-menu-btn.open span:nth-child(2){opacity:0;transform:scaleX(0)}
+.hdr-menu-btn.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+/* DRAWER */
+.hdr-drawer{display:none;position:fixed;top:58px;right:0;width:240px;background:var(--ink);border-left:1px solid rgba(255,255,255,.15);border-bottom:1px solid rgba(255,255,255,.15);border-radius:0 0 0 14px;box-shadow:-4px 4px 24px rgba(0,0,0,.4);z-index:299;flex-direction:column;padding:8px;gap:4px}
+.hdr-drawer.open{display:flex;animation:drawerIn .2s ease}
+@keyframes drawerIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+.hdr-drawer-btn{background:none;border:none;color:#fff;padding:13px 16px;border-radius:8px;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:14px;font-weight:600;text-align:left;width:100%;display:flex;align-items:center;gap:10px;transition:background .15s}
+.hdr-drawer-btn:hover,.hdr-drawer-btn:active{background:rgba(255,255,255,.12)}
+.hdr-drawer-btn.drawer-danger{color:#ff8070}
+.hdr-drawer-sep{height:1px;background:rgba(255,255,255,.1);margin:4px 0}
+.hdr-drawer-overlay{display:none;position:fixed;inset:0;z-index:298}
+.hdr-drawer-overlay.open{display:block}
 
 /* ADMIN PANEL */
 .admin-panel{background:var(--ink);color:#fff;padding:16px 20px;border-bottom:2px solid rgba(255,255,255,.1)}
@@ -1244,7 +1690,8 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--ink);min-he
 
 /* STEPS */
 .steps{background:var(--s0);border-bottom:2px solid var(--bdr);padding:10px 20px;display:flex;align-items:center;overflow-x:auto;gap:0}
-.step{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);white-space:nowrap}
+.step{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);white-space:nowrap;cursor:pointer}
+.step-txt{display:inline}
 .step.active{color:var(--grn)}.step.done{color:var(--muted)}
 .step-n{width:24px;height:24px;border-radius:50%;border:2px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
 .step.active .step-n{background:var(--grn);border-color:var(--grn);color:#fff}
@@ -1344,9 +1791,33 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-nm{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.5px;color:var(--ink2)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
-.sinp{width:50px;height:44px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:22px;background:var(--s1);border:2px solid var(--bdr);border-radius:8px;color:var(--ink);outline:none;transition:border-color .15s}
-.sinp:focus{border-color:var(--blu)}.sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
+/* SCORE INPUT */
+.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18);background:var(--s0)}
+.sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
+.sinp::placeholder{color:var(--dim);font-size:20px}
+@media (max-width:767px){
+  .sinp{width:64px;height:58px;font-size:28px;border-radius:12px;border-width:2.5px;cursor:pointer}
+}
 .vs-lbl{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
+
+/* PAVÉ NUMÉRIQUE CUSTOM */
+#scoreNumpad{display:none;position:fixed;inset:0;z-index:1000}
+#scoreNumpad.np-open{display:block}
+#npOverlay{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+#npPanel{position:absolute;bottom:0;left:0;right:0;background:var(--s0);border-radius:20px 20px 0 0;padding:16px 16px 32px;box-shadow:0 -8px 40px rgba(0,0,0,.3);animation:npSlideUp .22s cubic-bezier(.2,.8,.4,1)}
+@keyframes npSlideUp{from{transform:translateY(100%)}to{transform:none}}
+#npLabel{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;text-align:center;margin-bottom:10px}
+#npDisplay{font-family:'Oswald',sans-serif;font-size:56px;font-weight:700;color:var(--ink);text-align:center;line-height:1;margin-bottom:16px;min-height:60px;letter-spacing:-1px}
+#npGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:320px;margin:0 auto}
+.npk{height:62px;border:none;border-radius:14px;font-family:'Oswald',sans-serif;font-size:26px;font-weight:600;background:var(--s1);color:var(--ink);cursor:pointer;transition:background .1s,transform .08s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.npk:active{background:var(--s3);transform:scale(.93)}
+.npk-del{background:var(--ylw-bg);color:var(--ylw);font-size:22px}
+.npk-del:active{background:#f0d090}
+.npk-ok{background:var(--grn);color:#fff;font-size:20px}
+.npk-ok:active{background:var(--grn2)}
+#npCancel{display:block;width:100%;max-width:320px;margin:12px auto 0;padding:12px;border:none;border-radius:12px;background:var(--s2);color:var(--muted);font-family:'Oswald',sans-serif;font-size:15px;letter-spacing:.5px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#npCancel:active{background:var(--s3)}
 
 /* TIMER */
 .timer-wrap{background:var(--ink2);border-radius:var(--r);padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;box-shadow:var(--shadow2)}
@@ -1418,13 +1889,194 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt24{margin-top:24px}
 .ovx{overflow-x:auto}.txt-muted{color:var(--muted);font-size:13px}
 
-/* RESPONSIVE */
-@media(max-width:640px){
-  .fr3{grid-template-columns:1fr 1fr}.fr3>*:last-child{grid-column:1/-1}
-  .mc{grid-template-columns:1fr 44px 24px 44px 1fr;gap:5px;padding:10px}
-  .timer-wrap{flex-direction:column;text-align:center}.timer-btns{flex-direction:row;flex-wrap:wrap;justify-content:center}
-  .sinp{width:44px;height:40px;font-size:20px}
-  .hdr-user{max-width:100px}
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE FIRST (v6)
+   ══════════════════════════════════════════════════════════ */
+
+/* ── TOUCH TARGET MINIMUM (accessibilité) ── */
+button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
+  min-height: 44px;
+}
+
+/* ── BASE : petits mobiles (<= 480px) ── */
+@media (max-width: 480px) {
+  /* Header : hamburger actif */
+  .hdr { height: auto; min-height: 54px; padding: 8px 12px; }
+  .hdr-user { font-size: 11px; max-width: 160px; }
+  #hdrDesktopBtns { display: none !important; }
+  .hdr-menu-btn { display: flex; }
+
+  /* Login */
+  .login-box { padding: 20px 16px; border-radius: 12px; }
+  .login-brand { font-size: 24px; }
+
+  /* Contenu */
+  .wrap { padding: 14px 10px 70px; }
+  .card { padding: 14px 12px; }
+  .sec-ttl { font-size: 19px; }
+
+  /* Formulaires */
+  .fr { grid-template-columns: 1fr; }
+  .fr3 { grid-template-columns: 1fr; gap: 8px; }
+  .fr3 > * { grid-column: unset; }
+
+  /* Ajouter joueur : empile le bouton sous les champs */
+  .fr3.player-add-row { grid-template-columns: 1fr 60px; }
+  .fr3.player-add-row > :nth-child(3) { grid-column: 1 / -1; order: 3; }
+
+  /* Match card : pleine largeur, empilé */
+  .mc {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 6px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .mc > .mt-r { text-align: center; }
+  .mc .vs-lbl { display: none; }
+  .mc::before { content: 'VS'; display: block; text-align: center; font-size: 11px; font-weight: 700; color: var(--dim); order: 2; }
+  .sinp { width: 58px; height: 50px; font-size: 24px; }
+
+  /* Score au centre */
+  .mc-score-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+  /* Timer */
+  .timer-wrap { flex-direction: column; align-items: center; text-align: center; padding: 14px 12px; gap: 10px; }
+  .timer-big { font-size: 52px; }
+  .timer-btns { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .timer-btns .btn { padding: 7px 14px; font-size: 12px; }
+
+  /* Onglets tours : scroll horizontal */
+  .rtabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: none; }
+  .rtabs::-webkit-scrollbar { display: none; }
+  .rtab { flex-shrink: 0; min-width: 54px; padding: 6px 10px; font-size: 12px; }
+
+  /* Spectateur nav : texte raccourci */
+  .spec-nav-btn { padding: 10px 12px; font-size: 12px; letter-spacing: .4px; }
+
+  /* Tableau classement : colonnes condensées */
+  .stbl { font-size: 11px; }
+  .stbl th, .stbl td { padding: 7px 4px; }
+  /* Masquer colonnes secondaires */
+  .stbl th:nth-child(8), .stbl td:nth-child(8),  /* BC */
+  .stbl th:nth-child(7), .stbl td:nth-child(7)   /* BP */
+  { display: none; }
+  .rank-c { font-size: 15px; width: 28px; }
+  .pts-c  { font-size: 16px; }
+
+  /* Podium */
+  .podium { flex-direction: column; align-items: center; gap: 10px; }
+  .pod { min-width: 0; width: 100%; max-width: 300px; padding: 16px 14px; }
+  .pod-ico { font-size: 30px; }
+  .pod-nm  { font-size: 18px; }
+  .pod-pts { font-size: 28px; }
+
+  /* Panneau admin */
+  .admin-panel { padding: 12px 12px; }
+  #adminPanel > div > div { grid-template-columns: 1fr !important; }
+
+  /* Modal */
+  .modal { padding: 18px 14px; }
+  .modal-ttl { font-size: 18px; }
+
+  /* Steps */
+  .steps { padding: 8px 12px; gap: 0; }
+  .step-txt { display: none; } /* cache le texte, garde juste le chiffre */
+  .step-n { width: 26px; height: 26px; font-size: 11px; }
+
+  /* Boutons groupés : empile sur mobile */
+  .flex.fw.g8 { gap: 6px; }
+  .flex.fw.g8 .btn { flex: 1 1 calc(50% - 6px); justify-content: center; }
+
+  /* Round header */
+  .round-hdr { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  .round-hdr-ttl { font-size: 14px; }
+
+  /* Wave blocks */
+  .wave-block { padding: 8px 10px; }
+
+  /* Ligne joueur */
+  .prow { flex-wrap: wrap; gap: 5px; }
+  .p-nm { font-size: 13px; }
+  .p-lvl { font-size: 10px; }
+
+  /* Boutons d'impression */
+  .print-btn-bar { display: flex; flex-wrap: wrap; gap: 6px; }
+  .print-btn-bar .btn { flex: 1 1 calc(50% - 6px); font-size: 12px; padding: 7px 8px; }
+}
+
+/* ── TABLETTE PORTRAIT (481px – 767px) ── */
+@media (min-width: 481px) and (max-width: 767px) {
+  .hdr { padding: 0 16px; }
+  .hdr-user { max-width: 160px; }
+  #hdrDesktopBtns { display: none !important; }
+  .hdr-menu-btn { display: flex; }
+
+  .wrap { padding: 18px 14px 80px; }
+  .fr3 { grid-template-columns: 2fr 80px 80px auto; }
+
+  .mc {
+    grid-template-columns: 1fr 50px 26px 50px 1fr;
+    gap: 6px;
+    padding: 11px 12px;
+  }
+  .sinp { width: 56px; height: 48px; font-size: 23px; }
+
+  .timer-big { font-size: 56px; }
+  .timer-wrap { flex-direction: column; align-items: center; text-align: center; }
+  .timer-btns { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+
+  .rtabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .rtabs::-webkit-scrollbar { display: none; }
+
+  .podium { gap: 10px; }
+  .pod { min-width: 130px; }
+
+  .stbl th, .stbl td { padding: 8px 5px; }
+  .stbl { font-size: 12px; }
+
+  #adminPanel > div > div { grid-template-columns: 1fr !important; }
+
+  .spec-nav-btn { padding: 11px 16px; font-size: 13px; }
+}
+
+/* ── TABLETTE PAYSAGE / PETIT DESKTOP (768px – 980px) ── */
+@media (min-width: 768px) and (max-width: 980px) {
+  .hdr-user { max-width: 180px; }
+  .wrap { padding: 20px 16px 80px; }
+  .mc {
+    grid-template-columns: 1fr 54px 26px 54px 1fr;
+    gap: 7px;
+  }
+  .fr3 { grid-template-columns: 2fr 90px 90px auto; }
+  .timer-wrap { flex-direction: row; }
+}
+
+/* ── GRAND ÉCRAN (> 980px) ── */
+@media (min-width: 981px) {
+  .hdr-user { max-width: 220px; }
+  .timer-wrap { flex-direction: row; }
+}
+
+/* ── SAFE AREA pour iPhone X et + (notch / home bar) ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .wrap { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+  .spec-nav { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .hdr { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+}
+
+/* ── Scroll fluide sur iOS ── */
+.ovx, .rtabs, .sub-list { -webkit-overflow-scrolling: touch; }
+
+/* ── Focus visible (accessibilité clavier) ── */
+:focus-visible { outline: 2px solid var(--grn); outline-offset: 2px; border-radius: 4px; }
+
+/* ── Prévenir le zoom iOS sur les inputs ── */
+@media (max-width: 767px) {
+  input[type=text], input[type=number], input[type=time],
+  input[type=email], input[type=password], select, textarea {
+    font-size: 16px;
+  }
 }
 
 /* PRINT */
@@ -1436,7 +2088,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
   .card{box-shadow:none!important;border:1px solid #ccc!important;break-inside:avoid}
   .stbl{font-size:10px}.stbl th,.stbl td{padding:5px 4px}
   .mc{border:1px solid #ccc!important;background:#fff!important;box-shadow:none!important;break-inside:avoid}
-  .sinp{border:1px solid #999!important;background:#fff!important}
+  .sinp{border:1px solid #999!important;color:#000!important}
   .round-block{break-inside:avoid;border:1px solid #ccc!important}
   .no-print{display:none!important}.print-only{display:block!important}.modal-bg{display:none!important}
 }
@@ -1504,19 +2156,39 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 <header class="hdr">
   <div class="hdr-brand">🏓 Americano</div>
   <div class="hdr-user" id="hdrUserName"></div>
-  <div class="hdr-r">
+
+  <!-- Boutons desktop (cachés sur mobile) -->
+  <div class="hdr-r" id="hdrDesktopBtns">
     <button class="hdr-btn" id="ruleBtn" onclick="toggleRules()">📋 Règlement</button>
-    <button class="hdr-btn" data-role="scorer" onclick="goToLive()" style="display:none">📺 Live</button>
-    <button class="hdr-btn" data-role="admin" onclick="toggleAdminPanel()" style="display:none">👑 Admin</button>
+    <button class="hdr-btn" id="liveBtn" data-role="scorer" onclick="goToLive()" style="display:none">📺 Live</button>
+    <button class="hdr-btn" id="adminBtn" data-role="admin" onclick="toggleAdminPanel()" style="display:none">👑 Admin</button>
     <button class="hdr-btn" id="backBtn" style="display:none" onclick="goBack()">← Retour</button>
     <button class="hdr-btn" id="logoutBtn" onclick="logout()">Quitter</button>
   </div>
+
+  <!-- Bouton hamburger (visible sur mobile) -->
+  <button class="hdr-menu-btn" id="menuHamburger" onclick="toggleMobileMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
 </header>
+
+<!-- Overlay pour fermer le drawer en cliquant dehors -->
+<div class="hdr-drawer-overlay" id="menuOverlay" onclick="closeMobileMenu()"></div>
+
+<!-- Drawer mobile -->
+<div class="hdr-drawer" id="mobileDrawer">
+  <button class="hdr-drawer-btn" onclick="closeMobileMenu();toggleRules()">📋 Règlement</button>
+  <button class="hdr-drawer-btn" id="drawerLiveBtn" data-role="scorer" onclick="closeMobileMenu();goToLive()" style="display:none">📺 Live</button>
+  <button class="hdr-drawer-btn" id="drawerAdminBtn" data-role="admin" onclick="closeMobileMenu();toggleAdminPanel()" style="display:none">👑 Admin</button>
+  <button class="hdr-drawer-btn" id="drawerBackBtn" style="display:none" onclick="closeMobileMenu();goBack()">← Retour</button>
+  <div class="hdr-drawer-sep"></div>
+  <button class="hdr-drawer-btn drawer-danger" id="drawerLogoutBtn" onclick="closeMobileMenu();logout()">⏻ Quitter</button>
+</div>
 
 <!-- PANNEAU ADMIN -->
 <div id="adminPanel" style="display:none">
   <div class="admin-panel">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:960px;flex-wrap:wrap">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:960px">
 
       <!-- Créer un compte -->
       <div>
@@ -1621,15 +2293,15 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 
 <!-- STEPS (admin uniquement) -->
 <nav class="steps" id="stepNav">
-  <div class="step active" data-s="1"><div class="step-n">1</div>Config</div>
+  <div class="step active" data-s="1" onclick="goTo(1)"><div class="step-n">1</div><span class="step-txt">Config</span></div>
   <div class="step-ln" id="sl1"></div>
-  <div class="step" data-s="2"><div class="step-n">2</div>Joueurs</div>
+  <div class="step" data-s="2" onclick="goTo(2)"><div class="step-n">2</div><span class="step-txt">Joueurs</span></div>
   <div class="step-ln" id="sl2"></div>
-  <div class="step" data-s="3"><div class="step-n">3</div>Planning</div>
+  <div class="step" data-s="3" onclick="goTo(3)"><div class="step-n">3</div><span class="step-txt">Planning</span></div>
   <div class="step-ln" id="sl3"></div>
-  <div class="step" data-s="4"><div class="step-n">4</div>Tournoi</div>
+  <div class="step" data-s="4" onclick="goTo(4)"><div class="step-n">4</div><span class="step-txt">Tournoi</span></div>
   <div class="step-ln" id="sl4"></div>
-  <div class="step" data-s="5"><div class="step-n">5</div>Classement</div>
+  <div class="step" data-s="5" onclick="goTo(5)"><div class="step-n">5</div><span class="step-txt">Classement</span></div>
 </nav>
 
 <!-- PAGE 1 — CONFIG (admin uniquement) -->
@@ -1687,7 +2359,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
   <!-- Formulaire ajout : admin seulement -->
   <div class="card" data-role="admin" style="display:none">
     <div class="card-ttl">➕ Ajouter un joueur</div>
-    <div class="fr3">
+    <div class="fr3 player-add-row">
       <div><label>Prénom / Nom</label><input type="text" id="p_nm" placeholder="Ex: Marie Dupont" onkeydown="if(event.key==='Enter')addPlayer()"></div>
       <div><label>Niveau (1–5)</label><select id="p_lv"><option value="1">1 – Débutant</option><option value="2">2 – Novice</option><option value="3" selected>3 – Intermédiaire</option><option value="4">4 – Avancé</option><option value="5">5 – Expert</option></select></div>
       <div><label>Sexe</label><select id="p_gd"><option value="M">♂ Homme</option><option value="F">♀ Femme</option><option value="X">⚧ Autre</option></select></div>
@@ -1881,6 +2553,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
       <ul>
         <li>Si le nombre de joueurs n'est <strong>pas un multiple de 4</strong>, un ou plusieurs joueurs sont désignés <strong>remplaçants</strong> à chaque tour.</li>
         <li>La rotation est équitable : l'écart de matchs joués entre joueurs est <strong>au maximum de 1</strong> sur l'ensemble du tournoi.</li>
+        <li>En priorité, les remplaçants sont choisis parmi les joueurs de <strong>niveau le plus faible</strong> (en cas d'égalité de repos), afin de limiter l'impact compétitif.</li>
+        <li>Chaque tour au repos donne droit à <strong>+2 points de compensation</strong> (match nul fictif 0–0) pour ne pas pénaliser le classement.</li>
         <li>Les remplaçants sont indiqués dans le programme avant chaque tour.</li>
       </ul>
       <h4>Matchs anticipés</h4>
@@ -1925,6 +2599,13 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
         <li><strong>Match nul</strong> : <strong>2 points</strong> pour chaque joueur</li>
         <li><strong>Défaite</strong> : <strong>0 point</strong></li>
       </ul>
+      <h4>Compensation remplaçant (tour au repos)</h4>
+      <ul>
+        <li>Lorsqu'un joueur est désigné <strong>remplaçant</strong> pour un tour (nombre de joueurs non multiple de 4), il reçoit automatiquement <strong>2 points de compensation</strong>, équivalant à un <strong>match nul fictif 0 – 0</strong>.</li>
+        <li>Ce match fictif est comptabilisé comme un <strong>nul</strong> dans les statistiques (colonne N) et apparaît dans le total des matchs joués.</li>
+        <li>Cela garantit une <strong>équité totale</strong> : être remplaçant ne pénalise pas le classement par rapport aux joueurs qui ont joué.</li>
+        <li>Les tours au repos sont affichés dans le classement avec le badge <span style="background:#7a5c00;color:#ffd080;border-radius:8px;padding:1px 7px;font-size:11px;font-weight:700">🟡×N</span> pour information.</li>
+      </ul>
       <h4>Ordre de départage (à égalité de points)</h4>
       <ol style="padding-left:18px;font-size:13px;color:var(--muted);line-height:2">
         <li>Points totaux</li>
@@ -1934,11 +2615,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
         <li>Nombre de victoires</li>
         <li>Nombre de matchs joués</li>
       </ol>
-      <h4>Matchs non joués (remplaçants)</h4>
-      <ul>
-        <li>Les tours au repos (remplaçant) ne comptent pas comme défaites : ils sont simplement neutres et n'affectent pas le goal-average.</li>
-        <li>Le nombre de tours au repos est affiché dans le classement (badge 🟡) pour information.</li>
-      </ul>
     </div>
   </div>
 
@@ -2014,6 +2690,49 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 // init onCfgChange au chargement
 document.addEventListener('DOMContentLoaded', ()=>{ if(typeof onCfgChange==='function') onCfgChange(); });
+
+// ── MENU HAMBURGER MOBILE ────────────────────────────────
+window.toggleMobileMenu = function(){
+  const btn     = document.getElementById('menuHamburger');
+  const drawer  = document.getElementById('mobileDrawer');
+  const overlay = document.getElementById('menuOverlay');
+  const isOpen  = drawer.classList.contains('open');
+  if(isOpen){ closeMobileMenu(); }
+  else {
+    btn.classList.add('open');
+    drawer.classList.add('open');
+    overlay.classList.add('open');
+    // Synchronise les états display des boutons du drawer avec ceux du header
+    syncDrawerButtons();
+  }
+};
+window.closeMobileMenu = function(){
+  document.getElementById('menuHamburger').classList.remove('open');
+  document.getElementById('mobileDrawer').classList.remove('open');
+  document.getElementById('menuOverlay').classList.remove('open');
+};
+function syncDrawerButtons(){
+  // Copie la visibilité des boutons desktop vers le drawer
+  const pairs = [
+    ['liveBtn',   'drawerLiveBtn'],
+    ['adminBtn',  'drawerAdminBtn'],
+    ['backBtn',   'drawerBackBtn'],
+    ['logoutBtn', 'drawerLogoutBtn'],
+  ];
+  pairs.forEach(([deskId, drawId])=>{
+    const desk = document.getElementById(deskId);
+    const draw = document.getElementById(drawId);
+    if(desk && draw) draw.style.display = desk.style.display === 'none' ? 'none' : '';
+  });
+}
+// Ferme le drawer si on tourne l'écran ou redimensionne vers desktop
+window.addEventListener('resize', ()=>{ if(window.innerWidth > 767) closeMobileMenu(); });
+// Patch applyRoleUI pour synchroniser le drawer aussi
+const _origApplyRoleUIMobile = window.applyRoleUI;
+window.applyRoleUI = function(){
+  _origApplyRoleUIMobile && _origApplyRoleUIMobile();
+  syncDrawerButtons();
+};
 </script>
 
 </body>
