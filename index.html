@@ -184,7 +184,7 @@ function subscribeToResultsPublic(){
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
-    if(_scoreInputActive()) return;
+
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -400,7 +400,7 @@ function subscribeToResults(){
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
-    if(_scoreInputActive()) return;
+
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -649,90 +649,109 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── Saisie score : JAMAIS de re-render pendant la frappe ──────
-// Stratégie : oninput met à jour ST.results en mémoire + sauvegarde Firestore
-// Le re-render n'a lieu QUE si aucun input score n'est focusé au moment de la réponse Firestore
-// (les abonnements onSnapshot ne re-render plus si un input est actif)
+// ── KEYPAD — fonctionne sur mobile ET desktop ─────────────────
+let _kp = null; // contexte du keypad ouvert
 
-window.scoreInput = function(el, r, w, m, f){
-  // Ne pas modifier el.value ici — laisser le clavier mobile travailler librement
-  // Juste lire ce qui est tapé
-  const raw = el.value.replace(/[^0-9]/g, '');
-  // Limiter à 2 chiffres sans déplacer le curseur
-  if(raw.length > 2){ el.value = raw.slice(0,2); }
-  const v = el.value === '' ? '' : parseInt(el.value, 10);
+window.kpOpen = function(r, w, m, f, el){
+  if(!isScorer()) return;
+  // Ferme un keypad déjà ouvert
+  kpClose();
+  const key = r+'-'+w+'-'+m;
+  const cur = ST.results[key]||{ga:'',gb:''};
+  const initVal = (cur[f]!=null && cur[f]!=='') ? String(cur[f]) : '';
+  _kp = { r, w, m, f, val: initVal };
+
+  const lbl = f==='ga' ? 'Score équipe A' : 'Score équipe B';
+  const ov = document.createElement('div');
+  ov.id = 'kpOv';
+  ov.className = 'kp-ov';
+  ov.innerHTML = `
+    <div class="kp-box" id="kpBox">
+      <div class="kp-top">
+        <span class="kp-lbl">${lbl}</span>
+        <span class="kp-val" id="kpDisp">${initVal || '–'}</span>
+      </div>
+      <div class="kp-grid">
+        <button class="kp-k" ontouchend="kpDigit('1')" onclick="kpDigit('1')">1</button>
+        <button class="kp-k" ontouchend="kpDigit('2')" onclick="kpDigit('2')">2</button>
+        <button class="kp-k" ontouchend="kpDigit('3')" onclick="kpDigit('3')">3</button>
+        <button class="kp-k" ontouchend="kpDigit('4')" onclick="kpDigit('4')">4</button>
+        <button class="kp-k" ontouchend="kpDigit('5')" onclick="kpDigit('5')">5</button>
+        <button class="kp-k" ontouchend="kpDigit('6')" onclick="kpDigit('6')">6</button>
+        <button class="kp-k" ontouchend="kpDigit('7')" onclick="kpDigit('7')">7</button>
+        <button class="kp-k" ontouchend="kpDigit('8')" onclick="kpDigit('8')">8</button>
+        <button class="kp-k" ontouchend="kpDigit('9')" onclick="kpDigit('9')">9</button>
+        <button class="kp-k kp-del" ontouchend="kpDel()" onclick="kpDel()">⌫</button>
+        <button class="kp-k" ontouchend="kpDigit('0')" onclick="kpDigit('0')">0</button>
+        <button class="kp-k kp-ok" ontouchend="kpOk()" onclick="kpOk()">✔ OK</button>
+      </div>
+    </div>`;
+  // Clic sur l'overlay (hors du box) = annuler
+  ov.addEventListener('click', e => { if(e.target===ov) kpClose(); });
+  document.body.appendChild(ov);
+};
+
+window.kpDigit = function(d){
+  if(!_kp) return;
+  event && event.preventDefault();
+  if(_kp.val.length >= 2) return; // max 2 chiffres
+  _kp.val += d;
+  document.getElementById('kpDisp').textContent = _kp.val || '–';
+};
+
+window.kpDel = function(){
+  if(!_kp) return;
+  event && event.preventDefault();
+  _kp.val = _kp.val.slice(0,-1);
+  document.getElementById('kpDisp').textContent = _kp.val || '–';
+};
+
+window.kpOk = async function(){
+  if(!_kp) return;
+  event && event.preventDefault();
+  const {r, w, m, f, val} = _kp;
+  const v = val === '' ? '' : parseInt(val, 10);
+  kpClose();
   const key = r+'-'+w+'-'+m;
   const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
-  cur.ga = cur.ga==null?'':cur.ga;
-  cur.gb = cur.gb==null?'':cur.gb;
+  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
   cur[f] = v;
   ST.results[key] = cur;
-  // Couleur win/lose sans re-render
-  _updateScoreColors(r, w, m);
-  // Sauvegarde différée 1s — annulée si on continue à taper
-  clearTimeout(window._scoreTimer);
-  window._scoreTimer = setTimeout(() => _scoreSave(key, cur), 1000);
+  await saveResult(key, cur.ga, cur.gb);
+  renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-async function _scoreSave(key, cur){
-  try { await saveResult(key, cur.ga!=null?cur.ga:'', cur.gb!=null?cur.gb:''); }
-  catch(e){ console.error('Score save error', e); }
-  // Re-render tabs et classement mini seulement (pas renderMatches)
-  renderRoundTabs();
-  renderMiniStandings();
-  checkDone();
-  // Re-render complet seulement si aucun input score actif
-  if(!document.activeElement || !document.activeElement.classList.contains('sinp')){
-    renderMatches();
-  }
-}
+window.kpClose = function(){
+  document.getElementById('kpOv')?.remove();
+  _kp = null;
+};
 
-function _updateScoreColors(r, w, m){
-  const cur = ST.results[r+'-'+w+'-'+m]||{};
-  const ga = cur.ga!=null&&cur.ga!=='' ? +cur.ga : null;
-  const gb = cur.gb!=null&&cur.gb!=='' ? +cur.gb : null;
-  const inputs = [...document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`)];
-  inputs.forEach(el => {
-    if(ga!==null && gb!==null){
-      const isA = el.dataset.field==='ga';
-      el.classList.toggle('win-s', isA ? ga>gb : gb>ga);
-    } else {
-      el.classList.remove('win-s');
-    }
+// Ferme le keypad avec Escape (desktop)
+document.addEventListener('keydown', e => {
+  if(!_kp) return;
+  if(e.key==='Escape'){ kpClose(); return; }
+  if(e.key==='Enter'){ kpOk(); return; }
+  if(e.key==='Backspace'){ kpDel(); return; }
+  if(/^[0-9]$/.test(e.key)){ kpDigit(e.key); }
+});
+
+// Fonctions conservées pour compat (plus utilisées directement)
+window.scoreInput  = function(){};
+window.scoreCommit = function(){};
+window.scoreNav    = function(){};
+window.scoreFlush  = async function(){};
+
+function _scoreInputActive(){ return false; }
+function _updateScoreColors(r,w,m){
+  const cur=ST.results[r+'-'+w+'-'+m]||{};
+  const ga=cur.ga!=null&&cur.ga!==''?+cur.ga:null;
+  const gb=cur.gb!=null&&cur.gb!==''?+cur.gb:null;
+  document.querySelectorAll(`.sdsp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
+    if(ga!==null&&gb!==null){
+      el.classList.toggle('win-s',el.dataset.field==='ga'?ga>gb:gb>ga);
+    } else { el.classList.remove('win-s'); }
   });
 }
-
-// Navigation clavier
-window.scoreNav = function(e, el){
-  if(e.key==='Enter'){
-    e.preventDefault();
-    clearTimeout(window._scoreTimer);
-    const key=el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
-    const cur=ST.results[key]||{ga:'',gb:''};
-    _scoreSave(key, cur).then(()=>{
-      // Focus input suivant après re-render
-      setTimeout(()=>{
-        const all=[...document.querySelectorAll('.sinp:not([readonly])')];
-        const next=all[0]; if(next){next.focus();next.select();}
-      }, 100);
-    });
-  }
-  if(e.key==='Tab'){
-    e.preventDefault();
-    const all=[...document.querySelectorAll('.sinp:not([readonly])')];
-    const next=all[all.indexOf(el)+1];
-    if(next){next.focus();next.select();}
-  }
-  if(e.key==='Escape'){
-    clearTimeout(window._scoreTimer);
-    const key=el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
-    const saved=ST.results[key]||{};
-    el.value=saved[el.dataset.field]!=null?saved[el.dataset.field]:'';
-    el.blur();
-  }
-};
-
-window.scoreCommit = function(el,r,w,m,f){ /* compat */ };
 
 window.setRound = async function(r){
   ST.activeRound=r;
@@ -1352,25 +1371,21 @@ function renderMatches(){
           <div class="mt-nm">${mkP(m.pA1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pA2)}</div>
           <div class="mt-detail">${mkSubBtn(m.pA1)} ${mkEditBtn(m.pA1,idxA1)} ${mkP(m.pA1)} &nbsp;·&nbsp; ${mkSubBtn(m.pA2)} ${mkEditBtn(m.pA2,idxA2)} ${mkP(m.pA2)}</div>
         </div>
-        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
-          class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
-          ${isScorer()?`
-            onfocus="this.select()"
-            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
-            onkeydown="scoreNav(event,this)"
-          `:'readonly'}
-          style="${!isScorer()?'cursor:default;opacity:.6':''}"
-          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga" data-match="${ST.activeRound}-${wi}-${mi}">
+        ${isScorer() ? `
+          <div class="sdsp ${aW?'win-s':''} ${res.ga!==''?'has-val':''}"
+            onclick="kpOpen(${ST.activeRound},${wi},${mi},'ga',this)"
+            data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga" data-match="${ST.activeRound}-${wi}-${mi}">
+            ${res.ga!==''?res.ga:'–'}
+          </div>
+        ` : `<div class="sdsp" style="cursor:default;opacity:.5">${res.ga!==''?res.ga:'–'}</div>`}
         <div class="vs-lbl">VS</div>
-        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
-          class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
-          ${isScorer()?`
-            onfocus="this.select()"
-            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
-            onkeydown="scoreNav(event,this)"
-          `:'readonly'}
-          style="${!isScorer()?'cursor:default;opacity:.6':''}"
-          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb" data-match="${ST.activeRound}-${wi}-${mi}">
+        ${isScorer() ? `
+          <div class="sdsp ${bW?'win-s':''} ${res.gb!==''?'has-val':''}"
+            onclick="kpOpen(${ST.activeRound},${wi},${mi},'gb',this)"
+            data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb" data-match="${ST.activeRound}-${wi}-${mi}">
+            ${res.gb!==''?res.gb:'–'}
+          </div>
+        ` : `<div class="sdsp" style="cursor:default;opacity:.5">${res.gb!==''?res.gb:'–'}</div>`}
         <div class="mt-r">
           <div class="mt-court">TERRAIN ${mi+1}</div>
           <div class="mt-nm">${mkP(m.pB1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pB2)}</div>
@@ -1682,11 +1697,29 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-nm{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.5px;color:var(--ink2)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
-/* SCORE INPUT */
+/* SCORE INPUT — desktop */
 .sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text}
 .sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18)}
 .sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
 .sinp::placeholder{color:var(--dim);font-size:20px}
+/* SCORE DISPLAY — mobile (remplace l'input) */
+.sdsp{width:62px;height:52px;display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--dim);cursor:pointer;transition:border-color .15s;-webkit-tap-highlight-color:transparent;user-select:none}
+.sdsp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
+.sdsp.has-val{color:var(--ink)}
+.sdsp:active{border-color:var(--blu);background:var(--s2)}
+/* KEYPAD MODAL */
+.kp-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:flex-end;justify-content:center}
+.kp-box{background:var(--ink2);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));width:100%;max-width:400px;box-shadow:0 -6px 30px rgba(0,0,0,.5)}
+.kp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.kp-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+.kp-val{font-family:'Oswald',sans-serif;font-size:44px;font-weight:700;color:#ffd080;min-width:70px;text-align:right;letter-spacing:2px}
+.kp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kp-k{height:64px;border:none;border-radius:14px;background:var(--s1);color:var(--ink);font-family:'Oswald',sans-serif;font-size:28px;font-weight:700;cursor:pointer;transition:background .1s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.kp-k:active{background:var(--blu);color:#fff}
+.kp-k.kp-del{background:rgba(255,100,80,.15);color:#ff7060;font-size:22px}
+.kp-k.kp-del:active{background:#d04030;color:#fff}
+.kp-k.kp-ok{background:var(--grn);color:#fff;font-size:16px;font-weight:800;letter-spacing:.5px}
+.kp-k.kp-ok:active{background:#1e8a44}
 .vs-lbl{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
 
 /* TIMER */
