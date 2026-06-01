@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#3d3020">
-<title>🏓 Pickleball Americano</title>
+<title>🏓 Pickleball Americano v7</title>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- ══════════════════════════════════════════════════════════
@@ -645,9 +645,33 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
+// ── Focus : sélectionne tout le contenu et marque le champ pour réécriture ──
+window.scoreFocus = function(el){
+  // Marque le champ : la prochaine frappe remplacera la valeur entière
+  el._overwrite = true;
+  // select() pour desktop — sur mobile ça ne fait pas toujours qqch, mais ça ne nuit pas
+  el.select();
+  // Fallback iOS : setSelectionRange après un micro-délai
+  setTimeout(()=>{ try{ el.setSelectionRange(0, el.value.length); }catch(e){} }, 0);
+};
+
 // ── Scores : mise à jour mémoire uniquement (pas de re-render) ──
 window.scoreInput = function(el, r, w, m, f){
-  const raw = el.value.replace(/[^0-9]/g,'');
+  // Mode réécriture : si le champ était focalisé et qu'on tape le premier chiffre,
+  // on remplace tout l'ancien contenu (comportement attendu sur mobile)
+  let raw = el.value.replace(/[^0-9]/g,'');
+  if(el._overwrite && raw.length > 1){
+    // Garde seulement le(s) nouveau(x) caractère(s) ajouté(s)
+    // Sur mobile, oninput peut donner "113" si l'ancienne valeur était "11" et on tape "3"
+    // On détecte le chiffre ajouté en fin de chaîne
+    const oldLen = (el._prevRaw || '').length;
+    if(raw.length > oldLen + 1){
+      // Plus d'un chiffre d'écart → l'utilisateur a tapé sur une valeur sélectionnée
+      raw = raw.slice(-(raw.length - oldLen)) || raw.slice(-1);
+    }
+  }
+  el._overwrite = false;
+  el._prevRaw = raw;
   el.value = raw; // nettoie les caractères non numériques
   const v = raw === '' ? '' : parseInt(raw, 10);
   const key = r+'-'+w+'-'+m;
@@ -681,6 +705,10 @@ window.scoreFlush = async function(r, w, m){
     clearTimeout(el._saveTimer);
   });
   await saveResult(key, cur.ga, cur.gb);
+  // Après re-render, les anciens éléments sont détruits — reset quand même pour sécurité
+  document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`).forEach(inp=>{
+    inp._overwrite = false; inp._prevRaw = inp.value;
+  });
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
@@ -701,7 +729,7 @@ window.scoreNav = function(e, el){
     // Tab : passe au champ suivant SANS sauvegarder encore
     const all = [...document.querySelectorAll('.sinp:not([readonly])')];
     const next = all[all.indexOf(el)+1];
-    if(next){ next.focus(); next.select(); }
+    if(next){ scoreFocus(next); next.focus(); }
     else {
       clearTimeout(el._saveTimer);
       scoreFlush(+el.dataset.rid, +el.dataset.wi, +el.dataset.mi);
@@ -1340,8 +1368,9 @@ function renderMatches(){
         </div>
         <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
           class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           ${isScorer()?`
-            onfocus="this.select()"
+            onfocus="scoreFocus(this)"
             oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
             onkeydown="scoreNav(event,this)"
           `:'readonly'}
@@ -1350,8 +1379,9 @@ function renderMatches(){
         <div class="vs-lbl">VS</div>
         <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
           class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           ${isScorer()?`
-            onfocus="this.select()"
+            onfocus="scoreFocus(this)"
             oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
             onkeydown="scoreNav(event,this)"
           `:'readonly'}
@@ -1669,10 +1699,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
 /* SCORE INPUT */
-.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text}
-.sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18)}
+.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18);background:var(--s0)}
 .sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
 .sinp::placeholder{color:var(--dim);font-size:20px}
+@media (max-width:767px){
+  .sinp{width:64px;height:58px;font-size:28px;border-radius:12px;border-width:2.5px}
+  .sinp:focus{box-shadow:0 0 0 4px rgba(80,140,255,.22)}
+}
 .vs-lbl{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
 
 /* TIMER */
