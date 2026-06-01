@@ -16,7 +16,7 @@
 <script type="module">
 import { initializeApp }            from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword,
-         createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider,
+         createUserWithEmailAndPassword, signInWithRedirect, getRedirectResult, GoogleAuthProvider,
          signOut, updateProfile }   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection,
          addDoc, updateDoc, serverTimestamp, query, orderBy }
@@ -118,9 +118,20 @@ window.loginEmail = async function(){
   catch(e){ showAuthMsg(authErrMsg(e.code),'red'); }
 };
 window.loginGoogle = async function(){
-  try { await signInWithPopup(auth, gProvider); }
+  try { await signInWithRedirect(auth, gProvider); }
   catch(e){ showAuthMsg(authErrMsg(e.code),'red'); }
 };
+
+// Récupération du résultat après redirection Google
+getRedirectResult(auth).then(result => {
+  if(result && result.user){
+    // onAuthStateChanged prendra le relais automatiquement
+  }
+}).catch(e => {
+  if(e.code && e.code !== 'auth/no-current-user'){
+    console.warn('Redirect result error:', e.code);
+  }
+});
 
 window.logout = async function(){
   clearInterval(ST.timerIv); unsubAll();
@@ -746,6 +757,7 @@ window.scoreCommit = function(){};
 window.scoreNav    = function(){};
 window.scoreFlush  = async function(){};
 
+function _scoreInputActive(){ return false; }
 function _updateScoreColors(r,w,m){
   const cur=ST.results[r+'-'+w+'-'+m]||{};
   const ga=cur.ga!=null&&cur.ga!==''?+cur.ga:null;
@@ -753,11 +765,10 @@ function _updateScoreColors(r,w,m){
   document.querySelectorAll(`.sdsp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
     if(ga!==null&&gb!==null){
       el.classList.toggle('win-s',el.dataset.field==='ga'?ga>gb:gb>ga);
-    } else {
-      el.classList.remove('win-s');
-    }
+    } else { el.classList.remove('win-s'); }
   });
 }
+
 window.setRound = async function(r){
   ST.activeRound=r;
   if(isAdmin()) await saveTournament({ activeRound: r });
