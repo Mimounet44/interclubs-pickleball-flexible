@@ -18,7 +18,7 @@ import { initializeApp }            from 'https://www.gstatic.com/firebasejs/10.
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword,
          createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider,
          signOut, updateProfile }   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection,
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection,
          addDoc, updateDoc, serverTimestamp, query, orderBy }
                                     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -341,8 +341,7 @@ window.adminDeleteUser = async function(uid, name){
   if(!isAdmin()){ alert('Admin uniquement.'); return; }
   if(!confirm(`Supprimer l'utilisateur "${name}" ?\nCette action est irréversible.`)) return;
   try {
-    const { deleteDoc, doc: doc2 } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    await deleteDoc(doc2(db,'users',uid));
+    await deleteDoc(doc(db,'users',uid));
     await auditLog('admin_delete_user',{ uid, name });
     // Supprimer aussi via la REST API Firebase Auth (nécessite un token admin — si indispo, on supprime juste Firestore)
     const msg = document.getElementById('userListMsg');
@@ -417,10 +416,9 @@ async function saveTournament(fields){
 async function saveResult(key, ga, gb){
   if(!isScorer()){ alert('Action réservée aux scorers et admins.'); return; }
   try {
-    const { deleteDoc, doc: doc2 } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    // Si les deux champs sont vides → supprimer le document (annulation du score)
     if(ga===''&&gb===''){
-      await doc2 && deleteDoc(doc2(db,'results',key));
+      // Les deux champs vidés → supprimer le document (annulation complète du score)
+      await deleteDoc(doc(db,'results',key));
       await auditLog('delete_result',{ key });
     } else {
       await setDoc(doc(db,'results',key),{
