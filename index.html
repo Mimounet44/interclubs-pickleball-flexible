@@ -753,10 +753,11 @@ function _updateScoreColors(r,w,m){
   document.querySelectorAll(`.sdsp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
     if(ga!==null&&gb!==null){
       el.classList.toggle('win-s',el.dataset.field==='ga'?ga>gb:gb>ga);
-    } else { el.classList.remove('win-s'); }
+    } else {
+      el.classList.remove('win-s');
+    }
   });
 }
-
 window.setRound = async function(r){
   ST.activeRound=r;
   if(isAdmin()) await saveTournament({ activeRound: r });
