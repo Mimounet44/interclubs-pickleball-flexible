@@ -672,46 +672,50 @@ window.kpOpen = function(r, w, m, f, el){
         <span class="kp-val" id="kpDisp">${initVal || '–'}</span>
       </div>
       <div class="kp-grid">
-        <button class="kp-k" ontouchend="kpDigit('1')" onclick="kpDigit('1')">1</button>
-        <button class="kp-k" ontouchend="kpDigit('2')" onclick="kpDigit('2')">2</button>
-        <button class="kp-k" ontouchend="kpDigit('3')" onclick="kpDigit('3')">3</button>
-        <button class="kp-k" ontouchend="kpDigit('4')" onclick="kpDigit('4')">4</button>
-        <button class="kp-k" ontouchend="kpDigit('5')" onclick="kpDigit('5')">5</button>
-        <button class="kp-k" ontouchend="kpDigit('6')" onclick="kpDigit('6')">6</button>
-        <button class="kp-k" ontouchend="kpDigit('7')" onclick="kpDigit('7')">7</button>
-        <button class="kp-k" ontouchend="kpDigit('8')" onclick="kpDigit('8')">8</button>
-        <button class="kp-k" ontouchend="kpDigit('9')" onclick="kpDigit('9')">9</button>
-        <button class="kp-k kp-del" ontouchend="kpDel()" onclick="kpDel()">⌫</button>
-        <button class="kp-k" ontouchend="kpDigit('0')" onclick="kpDigit('0')">0</button>
-        <button class="kp-k kp-ok" ontouchend="kpOk()" onclick="kpOk()">✔ OK</button>
+        <button class="kp-k" ontouchstart="kpDigit('1',event)" onclick="kpDigit('1',event)">1</button>
+        <button class="kp-k" ontouchstart="kpDigit('2',event)" onclick="kpDigit('2',event)">2</button>
+        <button class="kp-k" ontouchstart="kpDigit('3',event)" onclick="kpDigit('3',event)">3</button>
+        <button class="kp-k" ontouchstart="kpDigit('4',event)" onclick="kpDigit('4',event)">4</button>
+        <button class="kp-k" ontouchstart="kpDigit('5',event)" onclick="kpDigit('5',event)">5</button>
+        <button class="kp-k" ontouchstart="kpDigit('6',event)" onclick="kpDigit('6',event)">6</button>
+        <button class="kp-k" ontouchstart="kpDigit('7',event)" onclick="kpDigit('7',event)">7</button>
+        <button class="kp-k" ontouchstart="kpDigit('8',event)" onclick="kpDigit('8',event)">8</button>
+        <button class="kp-k" ontouchstart="kpDigit('9',event)" onclick="kpDigit('9',event)">9</button>
+        <button class="kp-k kp-del" ontouchstart="kpDel(event)" onclick="kpDel(event)">⌫</button>
+        <button class="kp-k" ontouchstart="kpDigit('0',event)" onclick="kpDigit('0',event)">0</button>
+        <button class="kp-k kp-ok" ontouchstart="kpOk(event)" onclick="kpOk(event)">✔ OK</button>
       </div>
     </div>`;
   // Clic sur l'overlay (hors du box) = annuler
-  ov.addEventListener('click', e => { if(e.target===ov) kpClose(); });
+  ov.addEventListener('click', e => { if(e.target===ov) kpClose(e); });
   document.body.appendChild(ov);
 };
 
-window.kpDigit = function(d){
+window.kpDigit = function(d, e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
   if(!_kp) return;
-  event && event.preventDefault();
-  if(_kp.val.length >= 2) return; // max 2 chiffres
+  if(_kp.val.length >= 2) return;
   _kp.val += d;
-  document.getElementById('kpDisp').textContent = _kp.val || '–';
+  const disp = document.getElementById('kpDisp');
+  if(disp) disp.textContent = _kp.val || '–';
 };
 
-window.kpDel = function(){
+window.kpDel = function(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
   if(!_kp) return;
-  event && event.preventDefault();
-  _kp.val = _kp.val.slice(0,-1);
-  document.getElementById('kpDisp').textContent = _kp.val || '–';
+  _kp.val = _kp.val.slice(0, -1);
+  const disp = document.getElementById('kpDisp');
+  if(disp) disp.textContent = _kp.val || '–';
 };
 
-window.kpOk = async function(){
+window.kpOk = async function(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
   if(!_kp) return;
-  event && event.preventDefault();
   const {r, w, m, f, val} = _kp;
   const v = val === '' ? '' : parseInt(val, 10);
-  kpClose();
+  // Ferme APRÈS avoir lu les données
+  _kp = null;
+  document.getElementById('kpOv')?.remove();
   const key = r+'-'+w+'-'+m;
   const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
   if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
@@ -721,7 +725,8 @@ window.kpOk = async function(){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-window.kpClose = function(){
+window.kpClose = function(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
   document.getElementById('kpOv')?.remove();
   _kp = null;
 };
