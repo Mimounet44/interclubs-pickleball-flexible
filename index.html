@@ -421,14 +421,13 @@ async function saveTournament(fields){
 async function saveResult(key, ga, gb){
   if(!isScorer()){ alert('Action réservée aux scorers et admins.'); return; }
   try {
-    if(ga===''&&gb===''){
-      // Les deux champs vidés → supprimer le document (annulation complète du score)
+    // Supprime si l'UN OU L'AUTRE champ est vide (annulation partielle ou totale)
+    if(ga==='' || gb===''){
       await deleteDoc(doc(db,'results',key));
       await auditLog('delete_result',{ key });
     } else {
       await setDoc(doc(db,'results',key),{
-        ga: ga===''?null:ga,
-        gb: gb===''?null:gb,
+        ga: +ga, gb: +gb,
         savedAt: serverTimestamp(),
         savedBy: CURRENT_USER.uid
       });
@@ -656,21 +655,23 @@ window.setRes = async function(r,w,m,f,v){
 // (les abonnements onSnapshot ne re-render plus si un input est actif)
 
 window.scoreInput = function(el, r, w, m, f){
-  // Garde seulement les chiffres
-  const raw = el.value.replace(/[^0-9]/g, '').slice(0, 2);
-  if(el.value !== raw) { const pos = el.selectionStart; el.value = raw; }
-  const v = raw === '' ? '' : parseInt(raw, 10);
+  // Ne pas modifier el.value ici — laisser le clavier mobile travailler librement
+  // Juste lire ce qui est tapé
+  const raw = el.value.replace(/[^0-9]/g, '');
+  // Limiter à 2 chiffres sans déplacer le curseur
+  if(raw.length > 2){ el.value = raw.slice(0,2); }
+  const v = el.value === '' ? '' : parseInt(el.value, 10);
   const key = r+'-'+w+'-'+m;
   const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
   cur.ga = cur.ga==null?'':cur.ga;
   cur.gb = cur.gb==null?'':cur.gb;
   cur[f] = v;
   ST.results[key] = cur;
-  // Couleur win/lose directement sur les éléments existants (sans re-render)
+  // Couleur win/lose sans re-render
   _updateScoreColors(r, w, m);
-  // Sauvegarde Firestore silencieuse (sans re-render)
+  // Sauvegarde différée 1s — annulée si on continue à taper
   clearTimeout(window._scoreTimer);
-  window._scoreTimer = setTimeout(() => _scoreSave(key, cur), 600);
+  window._scoreTimer = setTimeout(() => _scoreSave(key, cur), 1000);
 };
 
 async function _scoreSave(key, cur){
