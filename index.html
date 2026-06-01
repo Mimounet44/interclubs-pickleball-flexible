@@ -172,9 +172,15 @@ function subscribeToTournamentPublic(){
     if(ST.schedule.length>0 && ST.page<4) goTo(4);
   });
 }
+function normalizeResult(data){
+  return { ga: data.ga==null?'':data.ga, gb: data.gb==null?'':data.gb };
+}
 function subscribeToResultsPublic(){
   unsubResults = onSnapshot(collection(db,'results'), (snap)=>{
-    snap.forEach(d=>{ ST.results[d.id]=d.data(); });
+    snap.docChanges().forEach(change=>{
+      if(change.type==='removed') delete ST.results[change.doc.id];
+      else ST.results[change.doc.id]=normalizeResult(change.doc.data());
+    });
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -387,7 +393,10 @@ function subscribeToTournament(){
 }
 function subscribeToResults(){
   unsubResults = onSnapshot(collection(db,'results'), (snap)=>{
-    snap.forEach(d=>{ ST.results[d.id]=d.data(); });
+    snap.docChanges().forEach(change=>{
+      if(change.type==='removed') delete ST.results[change.doc.id];
+      else ST.results[change.doc.id]=normalizeResult(change.doc.data());
+    });
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -408,10 +417,20 @@ async function saveTournament(fields){
 async function saveResult(key, ga, gb){
   if(!isScorer()){ alert('Action réservée aux scorers et admins.'); return; }
   try {
-    await setDoc(doc(db,'results',key),{
-      ga, gb, savedAt: serverTimestamp(), savedBy: CURRENT_USER.uid
-    });
-    await auditLog('save_result',{ key, ga, gb });
+    const { deleteDoc, doc: doc2 } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    // Si les deux champs sont vides → supprimer le document (annulation du score)
+    if(ga===''&&gb===''){
+      await doc2 && deleteDoc(doc2(db,'results',key));
+      await auditLog('delete_result',{ key });
+    } else {
+      await setDoc(doc(db,'results',key),{
+        ga: ga===''?null:ga,
+        gb: gb===''?null:gb,
+        savedAt: serverTimestamp(),
+        savedBy: CURRENT_USER.uid
+      });
+      await auditLog('save_result',{ key, ga, gb });
+    }
   } catch(e){ alert('Erreur sauvegarde score : '+e.message); }
 }
 
@@ -628,7 +647,8 @@ window.scoreCommit = async function(el,r,w,m,f){
   const cur=ST.results[key]||{ga:'',gb:''};
   cur[f]=v===''?'':v;
   ST.results[key]=cur;
-  if(cur.ga!==''&&cur.gb!=='') await saveResult(key, cur.ga, cur.gb);
+  // Toujours persister : supprime si les deux vides, sauvegarde sinon
+  await saveResult(key, cur.ga===undefined?'':cur.ga, cur.gb===undefined?'':cur.gb);
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
