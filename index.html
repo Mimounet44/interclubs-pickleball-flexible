@@ -641,44 +641,84 @@ window.setRes = async function(r,w,m,f,v){
   const cur=ST.results[key]||{ga:'',gb:''};
   cur[f]=v===''?'':+v;
   ST.results[key]=cur;
-  await saveResult(key, cur.ga!==undefined?cur.ga:'', cur.gb!==undefined?cur.gb:'');
+  await saveResult(key, cur.ga!=null?cur.ga:'', cur.gb!=null?cur.gb:'');
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── Gestion scores : saisie libre, sauvegarde au blur ─────────
-// On ne re-render PAS pendant la frappe pour ne pas casser la saisie mobile.
-// Le re-render ne se fait qu'après saveResult (qui lui-même ne bloque pas).
-
-window.scoreCommit = async function(el, r, w, m, f){
-  const raw = el.value.trim();
-  // Accepte '' (effacement) ou un entier >= 0
+// ── Scores : mise à jour mémoire uniquement (pas de re-render) ──
+window.scoreInput = function(el, r, w, m, f){
+  const raw = el.value.replace(/[^0-9]/g,'');
+  el.value = raw; // nettoie les caractères non numériques
   const v = raw === '' ? '' : parseInt(raw, 10);
-  if(raw !== '' && (isNaN(v) || v < 0)){ el.value = ''; return; }
-
   const key = r+'-'+w+'-'+m;
-  const cur = Object.assign({ ga:'', gb:'' }, ST.results[key]||{});
+  const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
+  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
   cur[f] = v;
-  // Nettoie null/undefined
-  if(cur.ga == null) cur.ga = '';
-  if(cur.gb == null) cur.gb = '';
   ST.results[key] = cur;
+  // Mise à jour visuelle légère sans re-render (couleur gagnant)
+  const other = f==='ga' ? cur.gb : cur.ga;
+  if(v!=='' && other!==''){
+    el.classList.toggle('win-s', v > other);
+    // Met à jour l'autre champ aussi si visible
+    const matchInputs = [...document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`)];
+    const otherEl = matchInputs.find(x => x.dataset.field !== f);
+    if(otherEl) otherEl.classList.toggle('win-s', other > v);
+  } else {
+    el.classList.remove('win-s');
+  }
+  // Sauvegarde + re-render différés — annule si on retape dans les 800ms
+  clearTimeout(el._saveTimer);
+  el._saveTimer = setTimeout(() => scoreFlush(r, w, m), 800);
+};
 
+// ── Sauvegarde + re-render (appelé après pause de frappe ou Enter) ──
+window.scoreFlush = async function(r, w, m){
+  const key = r+'-'+w+'-'+m;
+  const cur = ST.results[key]||{ga:'',gb:''};
+  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
+  // Annule les timers en cours sur les inputs de ce match avant de re-render
+  document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
+    clearTimeout(el._saveTimer);
+  });
   await saveResult(key, cur.ga, cur.gb);
-  // Re-render seulement APRÈS la sauvegarde, le DOM est alors cohérent
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// Navigation : Enter/Tab → blur (qui déclenche scoreCommit via onblur) puis focus suivant
+// ── Navigation : Enter sauvegarde immédiatement et passe au suivant ──
 window.scoreNav = function(e, el){
-  if(e.key === 'Enter' || e.key === 'Tab'){
+  if(e.key === 'Enter'){
     e.preventDefault();
-    const all = [...document.querySelectorAll('.sinp:not([readonly])')];
-    const next = all[all.indexOf(el) + 1];
-    el.blur(); // déclenche onblur → scoreCommit
-    if(next) setTimeout(() => { next.focus(); next.select(); }, 80);
+    clearTimeout(el._saveTimer);
+    const r=+el.dataset.rid, w=+el.dataset.wi, m=+el.dataset.mi, f=el.dataset.field;
+    scoreFlush(r, w, m).then(()=>{
+      // Après re-render, focus sur le prochain input
+      const all = [...document.querySelectorAll('.sinp:not([readonly])')];
+      if(all.length > 0) all[0].focus();
+    });
   }
-  if(e.key === 'Escape') el.blur();
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    // Tab : passe au champ suivant SANS sauvegarder encore
+    const all = [...document.querySelectorAll('.sinp:not([readonly])')];
+    const next = all[all.indexOf(el)+1];
+    if(next){ next.focus(); next.select(); }
+    else {
+      clearTimeout(el._saveTimer);
+      scoreFlush(+el.dataset.rid, +el.dataset.wi, +el.dataset.mi);
+    }
+  }
+  if(e.key === 'Escape'){
+    clearTimeout(el._saveTimer);
+    // Remet la valeur sauvegardée
+    const key = el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
+    const cur = ST.results[key]||{};
+    el.value = cur[el.dataset.field]!=null ? cur[el.dataset.field] : '';
+    el.blur();
+  }
 };
+
+// ── scoreCommit gardé pour compatibilité (appelé nulle part mais au cas où) ──
+window.scoreCommit = function(el,r,w,m,f){ scoreFlush(r,w,m); };
 
 window.setRound = async function(r){
   ST.activeRound=r;
@@ -1302,21 +1342,21 @@ function renderMatches(){
           class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
           ${isScorer()?`
             onfocus="this.select()"
-            onblur="scoreCommit(this,${ST.activeRound},${wi},${mi},'ga')"
+            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
             onkeydown="scoreNav(event,this)"
           `:'readonly'}
           style="${!isScorer()?'cursor:default;opacity:.6':''}"
-          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga">
+          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga" data-match="${ST.activeRound}-${wi}-${mi}">
         <div class="vs-lbl">VS</div>
         <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
           class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
           ${isScorer()?`
             onfocus="this.select()"
-            onblur="scoreCommit(this,${ST.activeRound},${wi},${mi},'gb')"
+            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
             onkeydown="scoreNav(event,this)"
           `:'readonly'}
           style="${!isScorer()?'cursor:default;opacity:.6':''}"
-          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb">
+          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb" data-match="${ST.activeRound}-${wi}-${mi}">
         <div class="mt-r">
           <div class="mt-court">TERRAIN ${mi+1}</div>
           <div class="mt-nm">${mkP(m.pB1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pB2)}</div>
