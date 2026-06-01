@@ -172,6 +172,9 @@ function subscribeToTournamentPublic(){
     if(ST.schedule.length>0 && ST.page<4) goTo(4);
   });
 }
+function _scoreInputActive(){
+  return document.activeElement && document.activeElement.classList.contains('sinp');
+}
 function normalizeResult(data){
   return { ga: data.ga==null?'':data.ga, gb: data.gb==null?'':data.gb };
 }
@@ -181,6 +184,7 @@ function subscribeToResultsPublic(){
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
+
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -396,6 +400,7 @@ function subscribeToResults(){
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
+
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -416,14 +421,13 @@ async function saveTournament(fields){
 async function saveResult(key, ga, gb){
   if(!isScorer()){ alert('Action réservée aux scorers et admins.'); return; }
   try {
-    if(ga===''&&gb===''){
-      // Les deux champs vidés → supprimer le document (annulation complète du score)
+    // Supprime si l'UN OU L'AUTRE champ est vide (annulation partielle ou totale)
+    if(ga==='' || gb===''){
       await deleteDoc(doc(db,'results',key));
       await auditLog('delete_result',{ key });
     } else {
       await setDoc(doc(db,'results',key),{
-        ga: ga===''?null:ga,
-        gb: gb===''?null:gb,
+        ga: +ga, gb: +gb,
         savedAt: serverTimestamp(),
         savedBy: CURRENT_USER.uid
       });
@@ -645,80 +649,114 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── Scores : mise à jour mémoire uniquement (pas de re-render) ──
-window.scoreInput = function(el, r, w, m, f){
-  const raw = el.value.replace(/[^0-9]/g,'');
-  el.value = raw; // nettoie les caractères non numériques
-  const v = raw === '' ? '' : parseInt(raw, 10);
+// ── KEYPAD — fonctionne sur mobile ET desktop ─────────────────
+let _kp = null; // contexte du keypad ouvert
+
+window.kpOpen = function(r, w, m, f, el){
+  if(!isScorer()) return;
+  // Ferme un keypad déjà ouvert
+  kpClose();
+  const key = r+'-'+w+'-'+m;
+  const cur = ST.results[key]||{ga:'',gb:''};
+  const initVal = (cur[f]!=null && cur[f]!=='') ? String(cur[f]) : '';
+  _kp = { r, w, m, f, val: initVal };
+
+  const lbl = f==='ga' ? 'Score équipe A' : 'Score équipe B';
+  const ov = document.createElement('div');
+  ov.id = 'kpOv';
+  ov.className = 'kp-ov';
+  ov.innerHTML = `
+    <div class="kp-box" id="kpBox">
+      <div class="kp-top">
+        <span class="kp-lbl">${lbl}</span>
+        <span class="kp-val" id="kpDisp">${initVal || '–'}</span>
+      </div>
+      <div class="kp-grid">
+        <button class="kp-k" ontouchstart="kpDigit('1',event)" onclick="kpDigit('1',event)">1</button>
+        <button class="kp-k" ontouchstart="kpDigit('2',event)" onclick="kpDigit('2',event)">2</button>
+        <button class="kp-k" ontouchstart="kpDigit('3',event)" onclick="kpDigit('3',event)">3</button>
+        <button class="kp-k" ontouchstart="kpDigit('4',event)" onclick="kpDigit('4',event)">4</button>
+        <button class="kp-k" ontouchstart="kpDigit('5',event)" onclick="kpDigit('5',event)">5</button>
+        <button class="kp-k" ontouchstart="kpDigit('6',event)" onclick="kpDigit('6',event)">6</button>
+        <button class="kp-k" ontouchstart="kpDigit('7',event)" onclick="kpDigit('7',event)">7</button>
+        <button class="kp-k" ontouchstart="kpDigit('8',event)" onclick="kpDigit('8',event)">8</button>
+        <button class="kp-k" ontouchstart="kpDigit('9',event)" onclick="kpDigit('9',event)">9</button>
+        <button class="kp-k kp-del" ontouchstart="kpDel(event)" onclick="kpDel(event)">⌫</button>
+        <button class="kp-k" ontouchstart="kpDigit('0',event)" onclick="kpDigit('0',event)">0</button>
+        <button class="kp-k kp-ok" ontouchstart="kpOk(event)" onclick="kpOk(event)">✔ OK</button>
+      </div>
+    </div>`;
+  // Clic sur l'overlay (hors du box) = annuler
+  ov.addEventListener('click', e => { if(e.target===ov) kpClose(e); });
+  document.body.appendChild(ov);
+};
+
+window.kpDigit = function(d, e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  if(!_kp) return;
+  if(_kp.val.length >= 2) return;
+  _kp.val += d;
+  const disp = document.getElementById('kpDisp');
+  if(disp) disp.textContent = _kp.val || '–';
+};
+
+window.kpDel = function(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  if(!_kp) return;
+  _kp.val = _kp.val.slice(0, -1);
+  const disp = document.getElementById('kpDisp');
+  if(disp) disp.textContent = _kp.val || '–';
+};
+
+window.kpOk = async function(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  if(!_kp) return;
+  const {r, w, m, f, val} = _kp;
+  const v = val === '' ? '' : parseInt(val, 10);
+  // Ferme APRÈS avoir lu les données
+  _kp = null;
+  document.getElementById('kpOv')?.remove();
   const key = r+'-'+w+'-'+m;
   const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
   if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
   cur[f] = v;
   ST.results[key] = cur;
-  // Mise à jour visuelle légère sans re-render (couleur gagnant)
-  const other = f==='ga' ? cur.gb : cur.ga;
-  if(v!=='' && other!==''){
-    el.classList.toggle('win-s', v > other);
-    // Met à jour l'autre champ aussi si visible
-    const matchInputs = [...document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`)];
-    const otherEl = matchInputs.find(x => x.dataset.field !== f);
-    if(otherEl) otherEl.classList.toggle('win-s', other > v);
-  } else {
-    el.classList.remove('win-s');
-  }
-  // Sauvegarde + re-render différés — annule si on retape dans les 800ms
-  clearTimeout(el._saveTimer);
-  el._saveTimer = setTimeout(() => scoreFlush(r, w, m), 800);
-};
-
-// ── Sauvegarde + re-render (appelé après pause de frappe ou Enter) ──
-window.scoreFlush = async function(r, w, m){
-  const key = r+'-'+w+'-'+m;
-  const cur = ST.results[key]||{ga:'',gb:''};
-  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
-  // Annule les timers en cours sur les inputs de ce match avant de re-render
-  document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
-    clearTimeout(el._saveTimer);
-  });
   await saveResult(key, cur.ga, cur.gb);
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── Navigation : Enter sauvegarde immédiatement et passe au suivant ──
-window.scoreNav = function(e, el){
-  if(e.key === 'Enter'){
-    e.preventDefault();
-    clearTimeout(el._saveTimer);
-    const r=+el.dataset.rid, w=+el.dataset.wi, m=+el.dataset.mi, f=el.dataset.field;
-    scoreFlush(r, w, m).then(()=>{
-      // Après re-render, focus sur le prochain input
-      const all = [...document.querySelectorAll('.sinp:not([readonly])')];
-      if(all.length > 0) all[0].focus();
-    });
-  }
-  if(e.key === 'Tab'){
-    e.preventDefault();
-    // Tab : passe au champ suivant SANS sauvegarder encore
-    const all = [...document.querySelectorAll('.sinp:not([readonly])')];
-    const next = all[all.indexOf(el)+1];
-    if(next){ next.focus(); next.select(); }
-    else {
-      clearTimeout(el._saveTimer);
-      scoreFlush(+el.dataset.rid, +el.dataset.wi, +el.dataset.mi);
-    }
-  }
-  if(e.key === 'Escape'){
-    clearTimeout(el._saveTimer);
-    // Remet la valeur sauvegardée
-    const key = el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
-    const cur = ST.results[key]||{};
-    el.value = cur[el.dataset.field]!=null ? cur[el.dataset.field] : '';
-    el.blur();
-  }
+window.kpClose = function(e){
+  if(e){ e.preventDefault(); e.stopPropagation(); }
+  document.getElementById('kpOv')?.remove();
+  _kp = null;
 };
 
-// ── scoreCommit gardé pour compatibilité (appelé nulle part mais au cas où) ──
-window.scoreCommit = function(el,r,w,m,f){ scoreFlush(r,w,m); };
+// Ferme le keypad avec Escape (desktop)
+document.addEventListener('keydown', e => {
+  if(!_kp) return;
+  if(e.key==='Escape'){ kpClose(); return; }
+  if(e.key==='Enter'){ kpOk(); return; }
+  if(e.key==='Backspace'){ kpDel(); return; }
+  if(/^[0-9]$/.test(e.key)){ kpDigit(e.key); }
+});
+
+// Fonctions conservées pour compat (plus utilisées directement)
+window.scoreInput  = function(){};
+window.scoreCommit = function(){};
+window.scoreNav    = function(){};
+window.scoreFlush  = async function(){};
+
+function _scoreInputActive(){ return false; }
+function _updateScoreColors(r,w,m){
+  const cur=ST.results[r+'-'+w+'-'+m]||{};
+  const ga=cur.ga!=null&&cur.ga!==''?+cur.ga:null;
+  const gb=cur.gb!=null&&cur.gb!==''?+cur.gb:null;
+  document.querySelectorAll(`.sdsp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
+    if(ga!==null&&gb!==null){
+      el.classList.toggle('win-s',el.dataset.field==='ga'?ga>gb:gb>ga);
+    } else { el.classList.remove('win-s'); }
+  });
+}
 
 window.setRound = async function(r){
   ST.activeRound=r;
@@ -1338,25 +1376,21 @@ function renderMatches(){
           <div class="mt-nm">${mkP(m.pA1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pA2)}</div>
           <div class="mt-detail">${mkSubBtn(m.pA1)} ${mkEditBtn(m.pA1,idxA1)} ${mkP(m.pA1)} &nbsp;·&nbsp; ${mkSubBtn(m.pA2)} ${mkEditBtn(m.pA2,idxA2)} ${mkP(m.pA2)}</div>
         </div>
-        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
-          class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
-          ${isScorer()?`
-            onfocus="this.select()"
-            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
-            onkeydown="scoreNav(event,this)"
-          `:'readonly'}
-          style="${!isScorer()?'cursor:default;opacity:.6':''}"
-          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga" data-match="${ST.activeRound}-${wi}-${mi}">
+        ${isScorer() ? `
+          <div class="sdsp ${aW?'win-s':''} ${res.ga!==''?'has-val':''}"
+            onclick="kpOpen(${ST.activeRound},${wi},${mi},'ga',this)"
+            data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga" data-match="${ST.activeRound}-${wi}-${mi}">
+            ${res.ga!==''?res.ga:'–'}
+          </div>
+        ` : `<div class="sdsp" style="cursor:default;opacity:.5">${res.ga!==''?res.ga:'–'}</div>`}
         <div class="vs-lbl">VS</div>
-        <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
-          class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
-          ${isScorer()?`
-            onfocus="this.select()"
-            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
-            onkeydown="scoreNav(event,this)"
-          `:'readonly'}
-          style="${!isScorer()?'cursor:default;opacity:.6':''}"
-          data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb" data-match="${ST.activeRound}-${wi}-${mi}">
+        ${isScorer() ? `
+          <div class="sdsp ${bW?'win-s':''} ${res.gb!==''?'has-val':''}"
+            onclick="kpOpen(${ST.activeRound},${wi},${mi},'gb',this)"
+            data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb" data-match="${ST.activeRound}-${wi}-${mi}">
+            ${res.gb!==''?res.gb:'–'}
+          </div>
+        ` : `<div class="sdsp" style="cursor:default;opacity:.5">${res.gb!==''?res.gb:'–'}</div>`}
         <div class="mt-r">
           <div class="mt-court">TERRAIN ${mi+1}</div>
           <div class="mt-nm">${mkP(m.pB1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pB2)}</div>
@@ -1668,11 +1702,29 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-nm{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.5px;color:var(--ink2)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
-/* SCORE INPUT */
+/* SCORE INPUT — desktop */
 .sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text}
 .sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18)}
 .sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
 .sinp::placeholder{color:var(--dim);font-size:20px}
+/* SCORE DISPLAY — mobile (remplace l'input) */
+.sdsp{width:62px;height:52px;display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--dim);cursor:pointer;transition:border-color .15s;-webkit-tap-highlight-color:transparent;user-select:none}
+.sdsp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
+.sdsp.has-val{color:var(--ink)}
+.sdsp:active{border-color:var(--blu);background:var(--s2)}
+/* KEYPAD MODAL */
+.kp-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:flex-end;justify-content:center}
+.kp-box{background:var(--ink2);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));width:100%;max-width:400px;box-shadow:0 -6px 30px rgba(0,0,0,.5)}
+.kp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.kp-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+.kp-val{font-family:'Oswald',sans-serif;font-size:44px;font-weight:700;color:#ffd080;min-width:70px;text-align:right;letter-spacing:2px}
+.kp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kp-k{height:64px;border:none;border-radius:14px;background:var(--s1);color:var(--ink);font-family:'Oswald',sans-serif;font-size:28px;font-weight:700;cursor:pointer;transition:background .1s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.kp-k:active{background:var(--blu);color:#fff}
+.kp-k.kp-del{background:rgba(255,100,80,.15);color:#ff7060;font-size:22px}
+.kp-k.kp-del:active{background:#d04030;color:#fff}
+.kp-k.kp-ok{background:var(--grn);color:#fff;font-size:16px;font-weight:800;letter-spacing:.5px}
+.kp-k.kp-ok:active{background:#1e8a44}
 .vs-lbl{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
 
 /* TIMER */
