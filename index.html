@@ -172,6 +172,9 @@ function subscribeToTournamentPublic(){
     if(ST.schedule.length>0 && ST.page<4) goTo(4);
   });
 }
+function _scoreInputActive(){
+  return document.activeElement && document.activeElement.classList.contains('sinp');
+}
 function normalizeResult(data){
   return { ga: data.ga==null?'':data.ga, gb: data.gb==null?'':data.gb };
 }
@@ -181,6 +184,7 @@ function subscribeToResultsPublic(){
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
+    if(_scoreInputActive()) return;
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -396,6 +400,7 @@ function subscribeToResults(){
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
+    if(_scoreInputActive()) return;
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
@@ -645,80 +650,88 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── Scores : mise à jour mémoire uniquement (pas de re-render) ──
+// ── Saisie score : JAMAIS de re-render pendant la frappe ──────
+// Stratégie : oninput met à jour ST.results en mémoire + sauvegarde Firestore
+// Le re-render n'a lieu QUE si aucun input score n'est focusé au moment de la réponse Firestore
+// (les abonnements onSnapshot ne re-render plus si un input est actif)
+
 window.scoreInput = function(el, r, w, m, f){
-  const raw = el.value.replace(/[^0-9]/g,'');
-  el.value = raw; // nettoie les caractères non numériques
+  // Garde seulement les chiffres
+  const raw = el.value.replace(/[^0-9]/g, '').slice(0, 2);
+  if(el.value !== raw) { const pos = el.selectionStart; el.value = raw; }
   const v = raw === '' ? '' : parseInt(raw, 10);
   const key = r+'-'+w+'-'+m;
   const cur = Object.assign({ga:'',gb:''}, ST.results[key]||{});
-  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
+  cur.ga = cur.ga==null?'':cur.ga;
+  cur.gb = cur.gb==null?'':cur.gb;
   cur[f] = v;
   ST.results[key] = cur;
-  // Mise à jour visuelle légère sans re-render (couleur gagnant)
-  const other = f==='ga' ? cur.gb : cur.ga;
-  if(v!=='' && other!==''){
-    el.classList.toggle('win-s', v > other);
-    // Met à jour l'autre champ aussi si visible
-    const matchInputs = [...document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`)];
-    const otherEl = matchInputs.find(x => x.dataset.field !== f);
-    if(otherEl) otherEl.classList.toggle('win-s', other > v);
-  } else {
-    el.classList.remove('win-s');
+  // Couleur win/lose directement sur les éléments existants (sans re-render)
+  _updateScoreColors(r, w, m);
+  // Sauvegarde Firestore silencieuse (sans re-render)
+  clearTimeout(window._scoreTimer);
+  window._scoreTimer = setTimeout(() => _scoreSave(key, cur), 600);
+};
+
+async function _scoreSave(key, cur){
+  try { await saveResult(key, cur.ga!=null?cur.ga:'', cur.gb!=null?cur.gb:''); }
+  catch(e){ console.error('Score save error', e); }
+  // Re-render tabs et classement mini seulement (pas renderMatches)
+  renderRoundTabs();
+  renderMiniStandings();
+  checkDone();
+  // Re-render complet seulement si aucun input score actif
+  if(!document.activeElement || !document.activeElement.classList.contains('sinp')){
+    renderMatches();
   }
-  // Sauvegarde + re-render différés — annule si on retape dans les 800ms
-  clearTimeout(el._saveTimer);
-  el._saveTimer = setTimeout(() => scoreFlush(r, w, m), 800);
-};
+}
 
-// ── Sauvegarde + re-render (appelé après pause de frappe ou Enter) ──
-window.scoreFlush = async function(r, w, m){
-  const key = r+'-'+w+'-'+m;
-  const cur = ST.results[key]||{ga:'',gb:''};
-  if(cur.ga==null) cur.ga=''; if(cur.gb==null) cur.gb='';
-  // Annule les timers en cours sur les inputs de ce match avant de re-render
-  document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`).forEach(el=>{
-    clearTimeout(el._saveTimer);
+function _updateScoreColors(r, w, m){
+  const cur = ST.results[r+'-'+w+'-'+m]||{};
+  const ga = cur.ga!=null&&cur.ga!=='' ? +cur.ga : null;
+  const gb = cur.gb!=null&&cur.gb!=='' ? +cur.gb : null;
+  const inputs = [...document.querySelectorAll(`.sinp[data-match="${r}-${w}-${m}"]`)];
+  inputs.forEach(el => {
+    if(ga!==null && gb!==null){
+      const isA = el.dataset.field==='ga';
+      el.classList.toggle('win-s', isA ? ga>gb : gb>ga);
+    } else {
+      el.classList.remove('win-s');
+    }
   });
-  await saveResult(key, cur.ga, cur.gb);
-  renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
-};
+}
 
-// ── Navigation : Enter sauvegarde immédiatement et passe au suivant ──
+// Navigation clavier
 window.scoreNav = function(e, el){
-  if(e.key === 'Enter'){
+  if(e.key==='Enter'){
     e.preventDefault();
-    clearTimeout(el._saveTimer);
-    const r=+el.dataset.rid, w=+el.dataset.wi, m=+el.dataset.mi, f=el.dataset.field;
-    scoreFlush(r, w, m).then(()=>{
-      // Après re-render, focus sur le prochain input
-      const all = [...document.querySelectorAll('.sinp:not([readonly])')];
-      if(all.length > 0) all[0].focus();
+    clearTimeout(window._scoreTimer);
+    const key=el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
+    const cur=ST.results[key]||{ga:'',gb:''};
+    _scoreSave(key, cur).then(()=>{
+      // Focus input suivant après re-render
+      setTimeout(()=>{
+        const all=[...document.querySelectorAll('.sinp:not([readonly])')];
+        const next=all[0]; if(next){next.focus();next.select();}
+      }, 100);
     });
   }
-  if(e.key === 'Tab'){
+  if(e.key==='Tab'){
     e.preventDefault();
-    // Tab : passe au champ suivant SANS sauvegarder encore
-    const all = [...document.querySelectorAll('.sinp:not([readonly])')];
-    const next = all[all.indexOf(el)+1];
-    if(next){ next.focus(); next.select(); }
-    else {
-      clearTimeout(el._saveTimer);
-      scoreFlush(+el.dataset.rid, +el.dataset.wi, +el.dataset.mi);
-    }
+    const all=[...document.querySelectorAll('.sinp:not([readonly])')];
+    const next=all[all.indexOf(el)+1];
+    if(next){next.focus();next.select();}
   }
-  if(e.key === 'Escape'){
-    clearTimeout(el._saveTimer);
-    // Remet la valeur sauvegardée
-    const key = el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
-    const cur = ST.results[key]||{};
-    el.value = cur[el.dataset.field]!=null ? cur[el.dataset.field] : '';
+  if(e.key==='Escape'){
+    clearTimeout(window._scoreTimer);
+    const key=el.dataset.rid+'-'+el.dataset.wi+'-'+el.dataset.mi;
+    const saved=ST.results[key]||{};
+    el.value=saved[el.dataset.field]!=null?saved[el.dataset.field]:'';
     el.blur();
   }
 };
 
-// ── scoreCommit gardé pour compatibilité (appelé nulle part mais au cas où) ──
-window.scoreCommit = function(el,r,w,m,f){ scoreFlush(r,w,m); };
+window.scoreCommit = function(el,r,w,m,f){ /* compat */ };
 
 window.setRound = async function(r){
   ST.activeRound=r;
