@@ -601,72 +601,50 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── +/- rapide ──────────────────────────────────────────────
-window.adjScore = async function(r,w,m,f,delta){
-  if(!isScorer()) return;
+// Saisie directe : met à jour la valeur en temps réel dès que c'est un entier valide
+window.scoreInput = function(el,r,w,m,f){
+  const raw=el.value.trim();
+  const v=raw===''?'':parseInt(raw,10);
+  if(raw!==''&&(isNaN(v)||v<0)){el.value='';return;}
   const key=r+'-'+w+'-'+m;
   const cur=ST.results[key]||{ga:'',gb:''};
-  const prev=cur[f]===''?0:+cur[f];
-  const next=Math.max(0,prev+delta);
-  cur[f]=next;
+  cur[f]=v===''?'':v;
+  ST.results[key]=cur;
+  // Met à jour visuellement la couleur win/loss sans re-render complet
+  const other=f==='ga'?cur.gb:cur.ga;
+  if(v!==''&&other!==''){
+    el.classList.toggle('win-s',v>other);
+  } else {
+    el.classList.remove('win-s');
+  }
+};
+
+// Valide et sauvegarde quand on quitte le champ (blur ou Enter)
+window.scoreCommit = async function(el,r,w,m,f){
+  const raw=el.value.trim();
+  const v=raw===''?'':parseInt(raw,10);
+  if(raw!==''&&(isNaN(v)||v<0)){el.value='';return;}
+  const key=r+'-'+w+'-'+m;
+  const cur=ST.results[key]||{ga:'',gb:''};
+  cur[f]=v===''?'':v;
   ST.results[key]=cur;
   if(cur.ga!==''&&cur.gb!=='') await saveResult(key, cur.ga, cur.gb);
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── Keypad modal pour saisie rapide sur mobile ────────────────
-let _kpCtx=null;
-window.openKeypad = function(r,w,m,f){
-  if(!isScorer()) return;
-  const key=r+'-'+w+'-'+m;
-  const cur=ST.results[key]||{ga:'',gb:''};
-  _kpCtx={r,w,m,f};
-  const lbl=f==='ga'?'Score Équipe A':'Score Équipe B';
-  const initVal=cur[f]!==''?String(cur[f]):'';
-  // Remove existing keypad if any
-  document.getElementById('skpadOverlay')?.remove();
-  const ov=document.createElement('div');
-  ov.id='skpadOverlay'; ov.className='skpad-overlay';
-  ov.innerHTML=`
-    <div class="skpad" onclick="event.stopPropagation()">
-      <div class="skpad-header">
-        <span class="skpad-lbl">${lbl}</span>
-        <span class="skpad-disp" id="skpadDisp">${initVal||'–'}</span>
-      </div>
-      <div class="skpad-grid">
-        ${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="skpad-k" onclick="kpKey('${n}')">${n}</button>`).join('')}
-        <button class="skpad-k skpad-del" onclick="kpKey('del')">⌫</button>
-        <button class="skpad-k" onclick="kpKey('0')">0</button>
-        <button class="skpad-k skpad-ok" onclick="kpKey('ok')">✔ OK</button>
-      </div>
-    </div>`;
-  ov.addEventListener('click', ()=>closeKeypad());
-  document.body.appendChild(ov);
-  window._kpVal=initVal;
-};
-window.kpKey = async function(k){
-  if(!_kpCtx) return;
-  if(k==='del'){
-    window._kpVal=window._kpVal.slice(0,-1);
-  } else if(k==='ok'){
-    const v=window._kpVal===''?'':+window._kpVal;
-    const {r,w,m,f}=_kpCtx;
-    await setRes(r,w,m,f,v===''?'':v);
-    closeKeypad(); return;
-  } else {
-    // max 2 chiffres (score max 99)
-    if(window._kpVal.length>=2) window._kpVal=window._kpVal.slice(1);
-    window._kpVal=(window._kpVal+k).replace(/^0+(\d)/,'$1');
+// Navigation clavier : Entrée/Tab passe au champ suivant, Echap déselectionne
+window.scoreNav = function(e,el){
+  if(e.key==='Enter'||e.key==='Tab'){
+    e.preventDefault();
+    // Trouver le prochain .sinp dans le DOM
+    const allInputs=[...document.querySelectorAll('.sinp:not([readonly])')];
+    const idx=allInputs.indexOf(el);
+    const next=allInputs[idx+1];
+    if(next){next.focus();next.select();}
+    else{el.blur();scoreCommit(el,+el.dataset.rid,+el.dataset.wi,+el.dataset.mi,el.dataset.field);}
   }
-  const disp=document.getElementById('skpadDisp');
-  if(disp) disp.textContent=window._kpVal||'–';
+  if(e.key==='Escape') el.blur();
 };
-window.closeKeypad = function(){
-  document.getElementById('skpadOverlay')?.remove();
-  _kpCtx=null; window._kpVal='';
-};
-// Fermer le keypad avec Escape
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeKeypad(); });
 
 window.setRound = async function(r){
   ST.activeRound=r;
@@ -1286,17 +1264,25 @@ function renderMatches(){
           <div class="mt-nm">${mkP(m.pA1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pA2)}</div>
           <div class="mt-detail">${mkSubBtn(m.pA1)} ${mkEditBtn(m.pA1,idxA1)} ${mkP(m.pA1)} &nbsp;·&nbsp; ${mkSubBtn(m.pA2)} ${mkEditBtn(m.pA2,idxA2)} ${mkP(m.pA2)}</div>
         </div>
-        <div class="sc-wrap">
-          ${isScorer()?`<button class="sc-btn sc-plus" onclick="adjScore(${ST.activeRound},${wi},${mi},'ga',1)" title="+ 1">＋</button>`:''}
-          <div class="sc-val ${aW?'win-s':''}" ${isScorer()?`onclick="openKeypad(${ST.activeRound},${wi},${mi},'ga')" title="Saisir score"`:''}>${res.ga!==''?res.ga:'–'}</div>
-          ${isScorer()?`<button class="sc-btn sc-minus" onclick="adjScore(${ST.activeRound},${wi},${mi},'ga',-1)" title="- 1" ${(res.ga===''||res.ga<=0)?'disabled':''}>－</button>`:''}
-        </div>
+        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99"
+          class="sinp ${aW?'win-s':''}" value="${res.ga!==''?res.ga:''}" placeholder="–"
+          ${isScorer()?`
+            onfocus="this.select()"
+            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'ga')"
+            onchange="scoreCommit(this,${ST.activeRound},${wi},${mi},'ga')"
+            onkeydown="scoreNav(event,this)"
+          `:'readonly'}
+          style="${!isScorer()?'cursor:default;opacity:.6':''}" data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="ga">
         <div class="vs-lbl">VS</div>
-        <div class="sc-wrap">
-          ${isScorer()?`<button class="sc-btn sc-plus" onclick="adjScore(${ST.activeRound},${wi},${mi},'gb',1)" title="+ 1">＋</button>`:''}
-          <div class="sc-val ${bW?'win-s':''}" ${isScorer()?`onclick="openKeypad(${ST.activeRound},${wi},${mi},'gb')" title="Saisir score"`:''}>${res.gb!==''?res.gb:'–'}</div>
-          ${isScorer()?`<button class="sc-btn sc-minus" onclick="adjScore(${ST.activeRound},${wi},${mi},'gb',-1)" title="- 1" ${(res.gb===''||res.gb<=0)?'disabled':''}>－</button>`:''}
-        </div>
+        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="99"
+          class="sinp ${bW?'win-s':''}" value="${res.gb!==''?res.gb:''}" placeholder="–"
+          ${isScorer()?`
+            onfocus="this.select()"
+            oninput="scoreInput(this,${ST.activeRound},${wi},${mi},'gb')"
+            onchange="scoreCommit(this,${ST.activeRound},${wi},${mi},'gb')"
+            onkeydown="scoreNav(event,this)"
+          `:'readonly'}
+          style="${!isScorer()?'cursor:default;opacity:.6':''}" data-rid="${ST.activeRound}" data-wi="${wi}" data-mi="${mi}" data-field="gb">
         <div class="mt-r">
           <div class="mt-court">TERRAIN ${mi+1}</div>
           <div class="mt-nm">${mkP(m.pB1)} <span style="color:var(--grn);font-size:13px">+</span> ${mkP(m.pB2)}</div>
@@ -1608,31 +1594,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-nm{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.5px;color:var(--ink2)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
-/* SCORE CONTROLS */
-.sc-wrap{display:flex;flex-direction:column;align-items:center;gap:0;user-select:none}
-.sc-val{font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;min-width:44px;height:40px;text-align:center;line-height:40px;color:var(--ink);cursor:pointer;border-radius:6px;transition:background .1s}
-.sc-val:hover{background:var(--s2)}
-.sc-val.win-s{color:var(--grn)}
-.sc-btn{width:38px;height:28px;border:none;border-radius:6px;background:rgba(255,255,255,.08);color:var(--ink);font-size:17px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .1s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.sc-btn:hover,.sc-btn:active{background:var(--blu);color:#fff}
-.sc-btn:disabled{opacity:.25;cursor:default}
-.sc-btn.sc-plus{background:rgba(99,220,130,.13);color:var(--grn)}
-.sc-btn.sc-plus:hover,.sc-btn.sc-plus:active{background:var(--grn);color:#fff}
-.sc-btn.sc-minus{background:rgba(255,80,80,.10);color:#ff7060}
-.sc-btn.sc-minus:hover,.sc-btn.sc-minus:active{background:#e05050;color:#fff}
-/* Score keypad modal */
-.skpad-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .15s}
-.skpad{background:var(--ink2);border-radius:18px 18px 0 0;padding:18px 16px 28px;width:100%;max-width:420px;box-shadow:0 -8px 40px rgba(0,0,0,.5)}
-.skpad-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.skpad-lbl{font-size:13px;font-weight:700;color:var(--dim);letter-spacing:.5px;text-transform:uppercase}
-.skpad-disp{font-family:'Oswald',sans-serif;font-size:42px;font-weight:700;color:#ffd080;min-width:80px;text-align:center}
-.skpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.skpad-k{height:60px;border:none;border-radius:12px;background:var(--s1);color:var(--ink);font-family:'Oswald',sans-serif;font-size:26px;font-weight:700;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .1s}
-.skpad-k:active,.skpad-k:hover{background:var(--blu);color:#fff}
-.skpad-k.skpad-del{font-size:20px;background:rgba(255,80,80,.12);color:#ff7060}
-.skpad-k.skpad-del:active{background:#e05050;color:#fff}
-.skpad-k.skpad-ok{background:var(--grn);color:#fff;font-size:18px;letter-spacing:.5px}
-.skpad-k.skpad-ok:active{background:#27a355}
+/* SCORE INPUT */
+.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;-moz-appearance:textfield;padding:0}
+.sinp::-webkit-outer-spin-button,.sinp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18)}
+.sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
+.sinp::placeholder{color:var(--dim);font-size:20px}
 .vs-lbl{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
 
 /* TIMER */
@@ -1751,7 +1718,7 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   .mc > .mt-r { text-align: center; }
   .mc .vs-lbl { display: none; }
   .mc::before { content: 'VS'; display: block; text-align: center; font-size: 11px; font-weight: 700; color: var(--dim); order: 2; }
-  .sc-val { font-size: 22px; min-width: 40px; } .sc-btn { width: 36px; height: 30px; }
+  .sinp { width: 58px; height: 50px; font-size: 24px; }
 
   /* Score au centre */
   .mc-score-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -1836,7 +1803,7 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
     gap: 6px;
     padding: 11px 12px;
   }
-  .sc-val { font-size: 21px; }
+  .sinp { width: 56px; height: 48px; font-size: 23px; }
 
   .timer-big { font-size: 56px; }
   .timer-wrap { flex-direction: column; align-items: center; text-align: center; }
@@ -1904,7 +1871,7 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   .card{box-shadow:none!important;border:1px solid #ccc!important;break-inside:avoid}
   .stbl{font-size:10px}.stbl th,.stbl td{padding:5px 4px}
   .mc{border:1px solid #ccc!important;background:#fff!important;box-shadow:none!important;break-inside:avoid}
-  .sc-btn{border:1px solid #999!important} .sc-val{color:#000!important}
+  .sinp{border:1px solid #999!important;color:#000!important}
   .round-block{break-inside:avoid;border:1px solid #ccc!important}
   .no-print{display:none!important}.print-only{display:block!important}.modal-bg{display:none!important}
 }
