@@ -87,7 +87,6 @@ async function ensureUserDoc(user){
 }
 
 onAuthStateChanged(auth, async (user)=>{
-  // Si on est en mode Live anonyme (enterLiveMode déjà appelé), on ignore
   if(USER_ROLE === 'spectator' && !user) return;
   if(user){
     CURRENT_USER = user;
@@ -122,10 +121,9 @@ window.loginGoogle = async function(){
   catch(e){ showAuthMsg(authErrMsg(e.code),'red'); }
 };
 
-// Récupération du résultat après redirection Google
 getRedirectResult(auth).then(result => {
   if(result && result.user){
-    // onAuthStateChanged prendra le relais automatiquement
+    // onAuthStateChanged prendra le relais
   }
 }).catch(e => {
   if(e.code && e.code !== 'auth/no-current-user'){
@@ -137,10 +135,9 @@ window.logout = async function(){
   clearInterval(ST.timerIv); unsubAll();
   USER_ROLE = null; CURRENT_USER = null;
   if(auth.currentUser) await signOut(auth);
-  else showLogin(); // mode live anonyme : retour direct à l'écran connexion
+  else showLogin();
 };
 
-// ── Mode Live sans compte avec redirection ────────────────
 window.enterLiveModeAndGo = function(target){
   CURRENT_USER = null;
   USER_ROLE    = 'spectator';
@@ -150,7 +147,6 @@ window.enterLiveModeAndGo = function(target){
   subscribeToTournamentPublic();
   subscribeToResultsPublic();
   if(target === 'R'){
-    // Afficher le règlement
     setTimeout(()=>{ if(typeof toggleRules==='function') toggleRules(); }, 100);
   } else if(target === 5){
     setTimeout(()=>{ goTo(5); }, 100);
@@ -159,17 +155,16 @@ window.enterLiveModeAndGo = function(target){
   }
 };
 
-// ── Mode Live sans compte (spectateur anonyme) ────────────
 window.enterLiveMode = function(){
   CURRENT_USER = null;
   USER_ROLE    = 'spectator';
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   applyRoleUI();
-  // Abonnements en lecture seule (pas besoin d'auth pour lire si règles ouvertes en lecture)
   subscribeToTournamentPublic();
   subscribeToResultsPublic();
 };
+
 function subscribeToTournamentPublic(){
   unsubTournament = onSnapshot(doc(db,'tournament','current'), (snap)=>{
     if(!snap.exists()) return;
@@ -183,25 +178,22 @@ function subscribeToTournamentPublic(){
     if(ST.schedule.length>0 && ST.page<4) goTo(4);
   });
 }
-function _scoreInputActive(){
-  return document.activeElement && document.activeElement.classList.contains('sinp');
-}
+
 function normalizeResult(data){
   return { ga: data.ga==null?'':data.ga, gb: data.gb==null?'':data.gb };
 }
+
 function subscribeToResultsPublic(){
   unsubResults = onSnapshot(collection(db,'results'), (snap)=>{
     snap.docChanges().forEach(change=>{
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
-
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
 }
 
-// ── Création de compte par l'admin (depuis page Config) ───
 window.adminCreateUser = async function(){
   if(!isAdmin()){ alert('Admin uniquement.'); return; }
   const name  = document.getElementById('newU_name').value.trim();
@@ -212,7 +204,6 @@ window.adminCreateUser = async function(){
   if(!name||!email||!pwd){ msg.textContent='Tous les champs sont requis.'; msg.style.color='var(--red)'; return; }
   if(pwd.length<6){ msg.textContent='Mot de passe : 6 car. minimum.'; msg.style.color='var(--red)'; return; }
   try {
-    // Créer l'utilisateur via la REST API Firebase Auth (sans déconnecter l'admin)
     const res = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyAvppGIS7M12LFgaPEuFdo-ed6rrAtgcSc`,
       { method:'POST', headers:{'Content-Type':'application/json'},
@@ -221,7 +212,6 @@ window.adminCreateUser = async function(){
     const data = await res.json();
     if(data.error){ throw new Error(data.error.message); }
     const uid = data.localId;
-    // Créer le doc Firestore
     await setDoc(doc(db,'users',uid),{
       email, name, role, createdAt: serverTimestamp(), createdBy: CURRENT_USER.uid
     });
@@ -235,6 +225,7 @@ window.adminCreateUser = async function(){
     msg.textContent='❌ '+e.message; msg.style.color='var(--red)';
   }
 };
+
 function authErrMsg(code){
   const map={
     'auth/wrong-password':'Mot de passe incorrect.',
@@ -248,28 +239,29 @@ function authErrMsg(code){
   };
   return map[code]||'Erreur : '+code;
 }
+
 function showAuthMsg(msg,color){
   const el=document.getElementById('authMsg');
   el.textContent=msg;
   el.style.color=color==='red'?'var(--red)':'var(--grn)';
 }
 
-// ══════════════════════════════════════════════════════════
-// UI LOGIN / APP
-// ══════════════════════════════════════════════════════════
 function showLogin(){
   document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appScreen').style.display='none';
 }
+
 function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   applyRoleUI();
 }
+
 function roleBadge(role){
   const map={admin:'👑 Admin',scorer:'✏️ Scorer',spectator:'👁 Spectateur'};
   return map[role]||role;
 }
+
 function applyRoleUI(){
   const name = CURRENT_USER
     ? (CURRENT_USER.displayName||CURRENT_USER.email||'?')
@@ -279,48 +271,39 @@ function applyRoleUI(){
   if(lBtn) lBtn.textContent = CURRENT_USER ? 'Déconnexion' : 'Quitter';
 
   const isSpec = USER_ROLE === 'spectator';
-
-  // Barre nav spectateur
   const specNav = document.getElementById('specNav');
   if(specNav) specNav.classList.toggle('visible', isSpec);
-
-  // Barre steps (admin/scorer uniquement)
   const stepNav = document.getElementById('stepNav');
   if(stepNav) stepNav.style.display = isSpec ? 'none' : '';
-
-  // Éléments admin-only
   document.querySelectorAll('[data-role="admin"]').forEach(el=>{
     el.style.display = isAdmin() ? '' : 'none';
   });
-  // Éléments scorer+admin
   document.querySelectorAll('[data-role="scorer"]').forEach(el=>{
     el.style.display = isScorer() ? '' : 'none';
   });
-  // Info spectateur sur page 4
   const si = document.getElementById('spectatorInfo');
   if(si) si.style.display = isSpec ? '' : 'none';
   updateStepVisibility();
+  syncDrawerButtons();
 }
+
 function updateStepVisibility(){
-  // Admin : étapes 1–5 | Scorer/Spectateur : 4–5 seulement
   [1,2,3].forEach(n=>{
     const el=document.querySelector(`.step[data-s="${n}"]`);
     if(el) el.style.display = isAdmin() ? '' : 'none';
   });
 }
 
-// ── Panneau admin ─────────────────────────────────────────
 window.toggleAdminPanel = function(){
   const el=document.getElementById('adminPanel');
   el.style.display = el.style.display==='none' ? 'block' : 'none';
 };
 
-// ── Charger la liste des utilisateurs ────────────────────
 window.loadUserList = async function(){
   if(!isAdmin()) return;
   const listEl = document.getElementById('userListBody');
   if(!listEl) return;
-  listEl.innerHTML = '<tr><td colspan="4" style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</td></tr>';
+  listEl.innerHTML='<tr><td colspan="4" style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</td></tr>';
   try {
     const { getDocs, collection: col2 } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
     const snap = await getDocs(col2(db,'users'));
@@ -339,8 +322,8 @@ window.loadUserList = async function(){
         <td style="padding:8px 6px">
           ${isMe ? '<span style="color:rgba(255,255,255,.3);font-size:11px">— vous —</span>' :
             `<button onclick="adminDeleteUser('${uid}','${(u.name||u.email||uid).replace(/'/g,"\\'")}')"
-              style="background:#8a1810;border:1px solid #c04030;color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:\'Exo 2\',sans-serif;font-weight:600;transition:all .15s"
-              onmouseover="this.style.background=\'#c02818\'" onmouseout="this.style.background=\'#8a1810\'">
+              style="background:#8a1810;border:1px solid #c04030;color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:'Exo 2',sans-serif;font-weight:600;transition:all .15s"
+              onmouseover="this.style.background='#c02818'" onmouseout="this.style.background='#8a1810'">
               🗑 Supprimer
             </button>`
           }
@@ -358,7 +341,6 @@ window.adminDeleteUser = async function(uid, name){
   try {
     await deleteDoc(doc(db,'users',uid));
     await auditLog('admin_delete_user',{ uid, name });
-    // Supprimer aussi via la REST API Firebase Auth (nécessite un token admin — si indispo, on supprime juste Firestore)
     const msg = document.getElementById('userListMsg');
     if(msg){ msg.textContent=`✅ Utilisateur "${name}" supprimé (Firestore). Pensez à le retirer de Firebase Auth si besoin.`; msg.style.color='var(--grn)'; setTimeout(()=>{ msg.textContent=''; },5000); }
     window.loadUserList();
@@ -367,7 +349,6 @@ window.adminDeleteUser = async function(uid, name){
   }
 };
 
-// ── Attribuer un rôle ─────────────────────────────────────
 window.setUserRole = async function(){
   if(!isAdmin()){ alert('Admin uniquement.'); return; }
   const uid  = document.getElementById('adminUidInput').value.trim();
@@ -385,9 +366,6 @@ window.setUserRole = async function(){
   }
 };
 
-// ══════════════════════════════════════════════════════════
-// FIRESTORE — ABONNEMENTS TEMPS RÉEL
-// ══════════════════════════════════════════════════════════
 function subscribeToTournament(){
   unsubTournament = onSnapshot(doc(db,'tournament','current'), (snap)=>{
     if(!snap.exists()) return;
@@ -401,25 +379,21 @@ function subscribeToTournament(){
     if(ST.page===5) renderFinal();
     if(isAdmin() && ST.page===1) syncCfgForm();
     if(isAdmin() && ST.page===2) renderPlayers();
-    // Scorer : si le tournoi est actif et sur une page setup, rediriger vers p4
     if(!isAdmin() && ST.schedule.length>0 && ST.page<4) goTo(4);
   });
 }
+
 function subscribeToResults(){
   unsubResults = onSnapshot(collection(db,'results'), (snap)=>{
     snap.docChanges().forEach(change=>{
       if(change.type==='removed') delete ST.results[change.doc.id];
       else ST.results[change.doc.id]=normalizeResult(change.doc.data());
     });
-
     if(ST.page===4){ renderMatches(); renderMiniStandings(); checkDone(); }
     if(ST.page===5) renderFinal();
   });
 }
 
-// ══════════════════════════════════════════════════════════
-// FIRESTORE — ÉCRITURES
-// ══════════════════════════════════════════════════════════
 async function saveTournament(fields){
   if(!isAdmin()){ alert("Action réservée à l'admin."); return; }
   try {
@@ -432,7 +406,6 @@ async function saveTournament(fields){
 async function saveResult(key, ga, gb){
   if(!isScorer()){ alert('Action réservée aux scorers et admins.'); return; }
   try {
-    // Supprime si l'UN OU L'AUTRE champ est vide (annulation partielle ou totale)
     if(ga==='' || gb===''){
       await deleteDoc(doc(db,'results',key));
       await auditLog('delete_result',{ key });
@@ -458,18 +431,13 @@ async function auditLog(action, details){
   } catch(e){}
 }
 
-// ══════════════════════════════════════════════════════════
-// MODIFICATION NOM JOUEUR (scorer + admin)
-// ══════════════════════════════════════════════════════════
 window.editPlayerName = async function(idx){
   if(!isScorer()) return;
   const p = ST.players[idx];
   if(!p) return;
-  // Trouver le span du nom dans le DOM et le remplacer par un input inline
   const spans = document.querySelectorAll(`[data-playeridx="${idx}"]`);
   const target = spans[0];
   if(!target) {
-    // Fallback si pas de data-playeridx trouvé
     const newName = prompt('Nouveau nom :', p.name);
     if(!newName || !newName.trim() || newName.trim()===p.name) return;
     await _savePlayerName(idx, newName.trim());
@@ -486,7 +454,6 @@ window.editPlayerName = async function(idx){
   inp.focus(); inp.select();
   const commit = async () => {
     const newName = inp.value.trim();
-    // Restaurer le span dans tous les cas
     const span = document.createElement('span');
     span.dataset.playeridx = idx;
     span.textContent = newName || oldName;
@@ -499,6 +466,7 @@ window.editPlayerName = async function(idx){
     if(e.key === 'Escape'){ inp.value = oldName; inp.blur(); }
   });
 };
+
 async function _savePlayerName(idx, newName){
   ST.players[idx].name = newName;
   try {
@@ -511,15 +479,10 @@ async function _savePlayerName(idx, newName){
   if(ST.page===4) renderMatches();
 }
 
-// ══════════════════════════════════════════════════════════
-// NAVIGATION
-// ══════════════════════════════════════════════════════════
 window.goTo = function(n){
-  // Pages 1-3 : admin uniquement
   if(n<=3 && !isAdmin()){
     if(ST.schedule.length>0){ n=4; }
     else {
-      // spectateur sans tournoi actif : afficher un message doux
       const si=document.getElementById('spectatorInfo');
       if(si){ si.style.display=''; si.innerHTML='👁 Mode <strong>Spectateur</strong> — aucun tournoi actif pour l\'instant. Revenez plus tard !'; }
       document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -532,27 +495,27 @@ window.goTo = function(n){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page'+n).classList.add('active');
   ST.page=n;
-  // Bouton retour : uniquement pour admin (scorers/spectateurs n'ont pas de workflow linéaire)
   document.getElementById('backBtn').style.display=(isAdmin()&&n>1)?'':'none';
   updateSteps(n);
   window.scrollTo(0,0);
   if(n===3) renderGen();
   if(n===4){ renderTournament(); const si=document.getElementById('spectatorInfo'); if(si) si.style.display=USER_ROLE==='spectator'?'':'none'; }
   if(n===5) renderFinal();
-  // Mettre à jour la nav spectateur
   updateSpectatorNav(n);
 };
+
 window.goBack = function(){
   if(ST.rulesOpen){toggleRules();return;}
   if(isAdmin() && ST.page>1) goTo(ST.page-1);
 };
+
 function updateSpectatorNav(n){
-  // Mettre en surbrillance le bouton actif dans la nav spectateur
   document.querySelectorAll('.spec-nav-btn').forEach(btn=>{
     const target=+btn.dataset.target;
     btn.classList.toggle('spec-nav-active', target===n);
   });
 }
+
 function updateSteps(n){
   document.querySelectorAll('.step').forEach(s=>{
     const sn=+s.dataset.s; s.classList.remove('active','done');
@@ -561,6 +524,7 @@ function updateSteps(n){
   });
   for(let i=1;i<=4;i++) document.getElementById('sl'+i).classList.toggle('done',i<n);
 }
+
 window.toggleRules = function(){
   ST.rulesOpen=!ST.rulesOpen;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -571,9 +535,6 @@ window.toggleRules = function(){
   if(!ST.rulesOpen) updateSpectatorNav(isAdmin()?ST.page:4);
 };
 
-// ══════════════════════════════════════════════════════════
-// PAGE 1 — CONFIG (admin uniquement)
-// ══════════════════════════════════════════════════════════
 function getCfg(){
   return {
     n:+document.getElementById('cfg_n').value,
@@ -586,6 +547,7 @@ function getCfg(){
     start:document.getElementById('cfg_start').value||'09:00'
   };
 }
+
 function syncCfgForm(){
   const c=ST.cfg;
   ['n','t','r','mt','tt','tp'].forEach(k=>{
@@ -603,9 +565,6 @@ window.saveCfgAndNext = async function(){
   goTo(2);
 };
 
-// ══════════════════════════════════════════════════════════
-// PAGE 2 — JOUEURS (admin uniquement pour ajouter/supprimer)
-// ══════════════════════════════════════════════════════════
 window.addPlayer = async function(){
   if(!isAdmin()) return;
   const nm=document.getElementById('p_nm').value.trim();
@@ -618,20 +577,25 @@ window.addPlayer = async function(){
   renderPlayers();
   await saveTournament({ players: ST.players });
 };
+
 window.delPlayer = async function(i){
   if(!isAdmin()) return;
   ST.players.splice(i,1); renderPlayers();
   await saveTournament({ players: ST.players });
 };
+
 window.clearPl = async function(){
   if(!isAdmin()) return;
   if(!confirm('Vider la liste ?')) return;
   ST.players=[]; renderPlayers();
   await saveTournament({ players: ST.players });
 };
+
 window.autoFill = async function(){
   if(!isAdmin()) return;
   const req=ST.cfg.n;
+  const NMS_M=['Alexandre','Baptiste','Cédric','David','Émile','Florian','Gabriel','Hugo','Ivan','Julien','Kevin','Lucas','Martin','Nicolas','Olivier','Pierre','Quentin','Raphaël','Sébastien','Thomas','Ulysse','Victor','William','Xavier','Yann','Zadig','Alexis','Benjamin','Charles','Damien','François','Gaston','Henri','Igor','José','Karl','Laurent','Michel','Nathan','Oscar','Pascal'];
+  const NMS_F=['Alice','Béatrice','Camille','Diane','Élise','Flora','Gaëlle','Héloïse','Inès','Julie','Karine','Laura','Marie','Nathalie','Ophélie','Pauline','Rébecca','Sophie','Tina','Ursula','Valentine','Wendy','Yasmine','Zoé','Amandine','Brigitte','Céline','Delphine','Emma','Fatima','Gina','Hana','Iris','Julia','Karen','Léa','Manon','Nadia','Océane'];
   for(let i=0;i<req-ST.players.length;i++){
     const male=(ST.players.length+i)%2===0;
     const nms=male?NMS_M:NMS_F;
@@ -643,13 +607,11 @@ window.autoFill = async function(){
   await saveTournament({ players: ST.players });
 };
 
-// ══════════════════════════════════════════════════════════
-// SCORES → Firebase (scorer + admin)
-// ══════════════════════════════════════════════════════════
 function getRes(r,w,m){
   const key=r+'-'+w+'-'+m; const d=ST.results[key]||{};
   return {ga:d.ga!=null?d.ga:'', gb:d.gb!=null?d.gb:''};
 }
+
 window.setRes = async function(r,w,m,f,v){
   if(!isScorer()){ alert('Réservé aux scorers et admins.'); return; }
   const key=r+'-'+w+'-'+m;
@@ -660,12 +622,10 @@ window.setRes = async function(r,w,m,f,v){
   renderRoundTabs(); renderMatches(); renderMiniStandings(); checkDone();
 };
 
-// ── KEYPAD — fonctionne sur mobile ET desktop ─────────────────
-let _kp = null; // contexte du keypad ouvert
+let _kp = null;
 
 window.kpOpen = function(r, w, m, f, el){
   if(!isScorer()) return;
-  // Ferme un keypad déjà ouvert
   kpClose();
   const key = r+'-'+w+'-'+m;
   const cur = ST.results[key]||{ga:'',gb:''};
@@ -697,7 +657,6 @@ window.kpOpen = function(r, w, m, f, el){
         <button class="kp-k kp-ok" ontouchstart="kpOk(event)" onclick="kpOk(event)">✔ OK</button>
       </div>
     </div>`;
-  // Clic sur l'overlay (hors du box) = annuler
   ov.addEventListener('click', e => { if(e.target===ov) kpClose(e); });
   document.body.appendChild(ov);
 };
@@ -724,7 +683,6 @@ window.kpOk = async function(e){
   if(!_kp) return;
   const {r, w, m, f, val} = _kp;
   const v = val === '' ? '' : parseInt(val, 10);
-  // Ferme APRÈS avoir lu les données
   _kp = null;
   document.getElementById('kpOv')?.remove();
   const key = r+'-'+w+'-'+m;
@@ -742,7 +700,6 @@ window.kpClose = function(e){
   _kp = null;
 };
 
-// Ferme le keypad avec Escape (desktop)
 document.addEventListener('keydown', e => {
   if(!_kp) return;
   if(e.key==='Escape'){ kpClose(); return; }
@@ -751,13 +708,6 @@ document.addEventListener('keydown', e => {
   if(/^[0-9]$/.test(e.key)){ kpDigit(e.key); }
 });
 
-// Fonctions conservées pour compat (plus utilisées directement)
-window.scoreInput  = function(){};
-window.scoreCommit = function(){};
-window.scoreNav    = function(){};
-window.scoreFlush  = async function(){};
-
-function _scoreInputActive(){ return false; }
 function _updateScoreColors(r,w,m){
   const cur=ST.results[r+'-'+w+'-'+m]||{};
   const ga=cur.ga!=null&&cur.ga!==''?+cur.ga:null;
@@ -775,19 +725,18 @@ window.setRound = async function(r){
   renderRoundTabs(); renderMatches(); renderSubInfo();
 };
 
-// ══════════════════════════════════════════════════════════
-// PLANNING / TOURNOI (admin uniquement)
-// ══════════════════════════════════════════════════════════
 window.startTournament = async function(){
   if(!isAdmin()) return;
   if(!buildSchedule()) return;
   await saveTournament({ schedule: ST.schedule, activeRound:0, status:'active', results:{} });
   goTo(4);
 };
+
 window.regenerate = async function(){
   if(!isAdmin()) return;
   if(buildSchedule()){ await saveTournament({ schedule: ST.schedule, activeRound:0 }); renderGen(); }
 };
+
 window.newTournament = async function(){
   if(!isAdmin()){ alert('Admin uniquement.'); return; }
   if(!confirm('Nouveau tournoi ? Toutes les données seront perdues.')) return;
@@ -799,9 +748,6 @@ window.newTournament = async function(){
   renderPlayers(); goTo(1); onCfgChange();
 };
 
-// ══════════════════════════════════════════════════════════
-// SUBSTITUTION (admin uniquement)
-// ══════════════════════════════════════════════════════════
 window.confirmSub = async function(){
   if(!isAdmin()){ alert('Les substitutions sont réservées à l\'admin.'); return; }
   if(!ST.sub.selId){ alert('Sélectionnez un remplaçant.'); return; }
@@ -811,6 +757,7 @@ window.confirmSub = async function(){
   closeSubModal();
   renderTournament();
 };
+
 function applySubstitution(){
   const {targetId,selId}=ST.sub;
   ST.schedule.forEach((rd,ri)=>{
@@ -831,18 +778,12 @@ window.goToLive = function(){
   else alert("Aucun tournoi actif pour l'instant.");
 };
 
-// ══════════════════════════════════════════════════════════
-// HELPERS TEMPS
-// ══════════════════════════════════════════════════════════
 function addMinutes(timeStr,mins){
   const [h,m]=timeStr.split(':').map(Number);
   const total=h*60+m+mins;
   return String(Math.floor(total/60)%24).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
 }
 
-// ══════════════════════════════════════════════════════════
-// PAGE 1 — CONFIG PREVIEW
-// ══════════════════════════════════════════════════════════
 function computeScheduleParams(c){
   const N=c.n,T=c.t,R=c.r;
   const simultaneous=T*4, rem=N%4, activeN=N-rem;
@@ -852,6 +793,7 @@ function computeScheduleParams(c){
   const totalDuration=R*roundDuration+(R-1)*c.tp;
   return {N,T,R,rem,activeN,wavesPerRound,baseWaveSize,simultaneous,roundDuration,totalDuration};
 }
+
 window.onCfgChange = function(){
   const c=getCfg(), p=computeScheduleParams(c);
   let cls='info-g', icon='✅', msg='';
@@ -876,13 +818,8 @@ window.onCfgChange = function(){
   document.getElementById('cfgBox').innerHTML=icon+' '+msg;
 };
 
-// ══════════════════════════════════════════════════════════
-// PAGE 2 — JOUEURS render
-// ══════════════════════════════════════════════════════════
-const NMS_M=['Alexandre','Baptiste','Cédric','David','Émile','Florian','Gabriel','Hugo','Ivan','Julien','Kevin','Lucas','Martin','Nicolas','Olivier','Pierre','Quentin','Raphaël','Sébastien','Thomas','Ulysse','Victor','William','Xavier','Yann','Zadig','Alexis','Benjamin','Charles','Damien','François','Gaston','Henri','Igor','José','Karl','Laurent','Michel','Nathan','Oscar','Pascal'];
-const NMS_F=['Alice','Béatrice','Camille','Diane','Élise','Flora','Gaëlle','Héloïse','Inès','Julie','Karine','Laura','Marie','Nathalie','Ophélie','Pauline','Rébecca','Sophie','Tina','Ursula','Valentine','Wendy','Yasmine','Zoé','Amandine','Brigitte','Céline','Delphine','Emma','Fatima','Gina','Hana','Iris','Julia','Karen','Léa','Manon','Nadia','Océane'];
-
 function reqN(){ return ST.cfg.n; }
+
 function renderPlayers(){
   const req=reqN(), n=ST.players.length, pct=Math.min(100,(n/req)*100);
   const el=document.getElementById('pCount'); if(!el) return;
@@ -892,7 +829,6 @@ function renderPlayers(){
   const bg=document.getElementById('btnGo3'); if(bg) bg.disabled=n<req;
   const list=document.getElementById('pList'); if(!list) return;
   if(!n){ list.innerHTML='<div class="txt-muted" style="padding:10px 0">Aucun joueur.</div>'; return; }
-  // Bouton crayon visible pour scorer+admin, croix uniquement admin
   list.innerHTML=ST.players.map((p,i)=>`
     <div class="prow">
       <span class="p-idx">${i+1}</span>
@@ -905,47 +841,33 @@ function renderPlayers(){
     </div>`).join('');
 }
 
-// ══════════════════════════════════════════════════════════
-// SCHEDULE BUILDER v5 (identique v5 original)
-// ══════════════════════════════════════════════════════════
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 function pk(a,b){return a<b?a+'-'+b:b+'-'+a;}
 function pLv(id){const p=ST.players.find(x=>x.id===id);return p?p.lv:3;}
 function pGender(id){const p=ST.players.find(x=>x.id===id);return p?p.g:'M';}
 
-// ─────────────────────────────────────────────────────────────
-// SCORE D'UN MATCH — pénalités/récompenses (plus bas = mieux)
-// ─────────────────────────────────────────────────────────────
 function matchScore(pA1,pA2,pB1,pB2,bal){
   let sc=0;
   const lA1=pLv(pA1),lA2=pLv(pA2),lB1=pLv(pB1),lB2=pLv(pB2);
   const gA1=pGender(pA1),gA2=pGender(pA2),gB1=pGender(pB1),gB2=pGender(pB2);
-
   if(bal==='level'||bal==='both'){
-    // Pénalité si partenaires de niveaux trop différents
     sc+=Math.abs(lA1-lA2)*90;
     sc+=Math.abs(lB1-lB2)*90;
-    // Pénalité forte si les deux équipes ont un écart de niveau total (évite deb vs elite)
     sc+=Math.abs((lA1+lA2)-(lB1+lB2))*150;
-    // Pénalité supplémentaire si un débutant (lv=1) est opposé à un élite (lv=5)
     const minA=Math.min(lA1,lA2),maxA=Math.max(lA1,lA2);
     const minB=Math.min(lB1,lB2),maxB=Math.max(lB1,lB2);
     if(minA<=1&&maxB>=5) sc+=500;
     if(minB<=1&&maxA>=5) sc+=500;
   }
-
   if(bal==='gender'||bal==='both'){
     const mixA=(gA1==='M'&&gA2==='F')||(gA1==='F'&&gA2==='M');
     const mixB=(gB1==='M'&&gB2==='F')||(gB1==='F'&&gB2==='M');
     const gs=[gA1,gA2,gB1,gB2];
     const nM=gs.filter(g=>g==='M').length;
     const nF=gs.filter(g=>g==='F').length;
-    // Forte récompense par paire mixte
     if(mixA) sc-=700;
     if(mixB) sc-=700;
-    // Pénalité asymétrie (une paire mixte, l'autre non)
     if(mixA!==mixB) sc+=350;
-    // Si le groupe contient assez de H et F pour être mixte partout → obligation
     if(nM>=2&&nF>=2){
       if(!mixA) sc+=1000;
       if(!mixB) sc+=1000;
@@ -954,7 +876,6 @@ function matchScore(pA1,pA2,pB1,pB2,bal){
   return sc;
 }
 
-// Renvoie true si la contrainte mixité stricte est satisfaite
 function isMixForced(pA1,pA2,pB1,pB2){
   const gs=[pGender(pA1),pGender(pA2),pGender(pB1),pGender(pB2)];
   const nM=gs.filter(g=>g==='M').length,nF=gs.filter(g=>g==='F').length;
@@ -964,34 +885,22 @@ function isMixForced(pA1,pA2,pB1,pB2){
   return mixA&&mixB;
 }
 
-// ─────────────────────────────────────────────────────────────
-// FORMATION DU GROUPE OPTIMISÉ (mixité + niveau) avant tirage
-// Construit un groupe de N joueurs depuis un pool en cherchant
-// la meilleure répartition H/F et niveaux pour les terrains
-// ─────────────────────────────────────────────────────────────
 function buildOptimalGroup(pool, n, bal){
   if(pool.length<=n) return [...pool];
-  // On cherche parmi plusieurs tentatives le groupe de n joueurs
-  // dont le score global de matchs possibles est le meilleur
-  // (on simule le meilleur appariement possible pour chaque combinaison)
-  // Pour des raisons de performance on essaie des groupes guidés
   let bestGroup=null, bestSc=Infinity;
   const attempts=30;
   for(let att=0;att<attempts;att++){
     let candidate;
     if(bal==='both'||bal==='gender'){
-      // Construire un groupe en alternant H et F selon disponibilité
       const males=shuffle(pool.filter(p=>p.g==='M'));
       const females=shuffle(pool.filter(p=>p.g==='F'));
       const others=shuffle(pool.filter(p=>p.g==='X'));
       candidate=[];
       const perTerrain=4, nT=n/4;
-      // Pour chaque terrain vouloir 2H+2F si possible
       const wantM=Math.min(nT*2,males.length);
       const wantF=Math.min(nT*2,females.length);
       for(let i=0;i<wantM;i++) candidate.push(males[i]);
       for(let i=0;i<wantF;i++) candidate.push(females[i]);
-      // Compléter avec les autres genres si pas assez
       let extra=[...males.slice(wantM),...females.slice(wantF),...others];
       shuffle(extra);
       while(candidate.length<n&&extra.length>0) candidate.push(extra.shift());
@@ -999,10 +908,8 @@ function buildOptimalGroup(pool, n, bal){
     } else {
       candidate=shuffle([...pool]).slice(0,n);
     }
-    // Évalue le score global théorique de ce groupe
     const ids=candidate.map(p=>p.id);
     let sc=0;
-    // Paires naïves pour évaluation rapide
     for(let i=0;i<ids.length;i+=4){
       if(i+3>=ids.length) break;
       sc+=matchScore(ids[i],ids[i+1],ids[i+2],ids[i+3],bal);
@@ -1012,9 +919,6 @@ function buildOptimalGroup(pool, n, bal){
   return bestGroup||shuffle([...pool]).slice(0,n);
 }
 
-// ─────────────────────────────────────────────────────────────
-// VALIDATION D'UN MATCH selon le mode relax
-// ─────────────────────────────────────────────────────────────
 function isMatchValid(pA1,pA2,pB1,pB2,pairCount,oppCount,lastPartnerRound,currentRound){
   if((pairCount[pk(pA1,pA2)]||0)>=1)return false;
   if((pairCount[pk(pB1,pB2)]||0)>=1)return false;
@@ -1024,26 +928,17 @@ function isMatchValid(pA1,pA2,pB1,pB2,pairCount,oppCount,lastPartnerRound,curren
   return true;
 }
 
-// ─────────────────────────────────────────────────────────────
-// GÉNÉRATION DES MATCHS pour un groupe
-// Cherche la meilleure combinaison : rotation + mixité + niveau
-// ─────────────────────────────────────────────────────────────
 function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRound,cfg){
   if(group.length<4)return[];
   const n=group.length,bal=cfg.bal;
   const strictGender=(bal==='gender'||bal==='both');
-  const strictLevel=(bal==='level'||bal==='both');
-
   for(let relaxMode=0;relaxMode<=3;relaxMode++){
     const enforceGender=strictGender&&relaxMode<3;
     let bestMatches=null,bestScore=Infinity;
     const maxAttempts=relaxMode===0?30:15;
-
     for(let attempt=0;attempt<maxAttempts;attempt++){
-      // Trier le groupe selon mixité+niveau avant de l'explorer
       let sorted;
       if(bal==='both'||bal==='gender'){
-        // Interleave H et F triés par niveau décroissant
         const ms=shuffle(group.filter(id=>pGender(id)==='M')).sort((a,b)=>pLv(b)-pLv(a));
         const fs=shuffle(group.filter(id=>pGender(id)==='F')).sort((a,b)=>pLv(b)-pLv(a));
         const xs=shuffle(group.filter(id=>pGender(id)==='X')).sort((a,b)=>pLv(b)-pLv(a));
@@ -1051,7 +946,6 @@ function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRoun
         const ml=Math.max(ms.length,fs.length,xs.length);
         for(let i=0;i<ml;i++){if(i<ms.length)sorted.push(ms[i]);if(i<fs.length)sorted.push(fs[i]);if(i<xs.length)sorted.push(xs[i]);}
       } else if(bal==='level'){
-        // Tri serpentin par niveau (meilleur+pire ensemble)
         const byLv=[...group].sort((a,b)=>pLv(b)-pLv(a));
         sorted=[];const half=Math.floor(byLv.length/2);
         for(let i=0;i<half;i++){sorted.push(byLv[i]);sorted.push(byLv[byLv.length-1-i]);}
@@ -1059,13 +953,11 @@ function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRoun
       } else {
         sorted=shuffle(group);
       }
-
       const used=new Set();const matches=[];let sc=0,ok=true;
       while(true){
         const avail=sorted.filter(id=>!used.has(id));
         if(avail.length<4)break;
         const a1=avail[0];let bestM=null,bestMSc=Infinity;
-
         for(let i=1;i<avail.length;i++){
           const a2=avail[i];
           for(let j=1;j<avail.length;j++){
@@ -1081,7 +973,6 @@ function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRoun
               else if(relaxMode>=2){
                 if((pairCount[pk(a1,a2)]||0)>=1||(pairCount[pk(b1,b2)]||0)>=1)valid=false;
               }
-              // Mixité obligatoire si possible
               if(valid&&enforceGender) valid=isMixForced(a1,a2,b1,b2);
               if(!valid)continue;
               const msc=matchScore(a1,a2,b1,b2,bal);
@@ -1095,7 +986,6 @@ function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRoun
       }
       if(ok&&matches.length*4===n&&sc<bestScore){bestScore=sc;bestMatches=matches;}
     }
-
     if(bestMatches&&bestMatches.length*4===n){
       if(relaxMode>0)bestMatches.forEach(m=>{m._relaxed=relaxMode;});
       bestMatches.forEach(m=>{
@@ -1110,16 +1000,10 @@ function makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,currentRoun
   return[];
 }
 
-// ─────────────────────────────────────────────────────────────
-// TRI DES REMPLAÇANTS : équité d'abord, niveau faible ensuite
-// ─────────────────────────────────────────────────────────────
 function sortForSubs(ids,playCount,byeCount){
   return [...ids].sort((a,b)=>{
-    // 1. Moins de matchs joués → remplaçant en priorité
     if(playCount[b]!==playCount[a]) return playCount[b]-playCount[a];
-    // 2. Déjà plus souvent remplaçant → moins prioritaire cette fois
     if(byeCount[a]!==byeCount[b]) return byeCount[a]-byeCount[b];
-    // 3. Niveau le plus faible → remplaçant en priorité (débutants d'abord)
     if(pLv(a)!==pLv(b)) return pLv(a)-pLv(b);
     return Math.random()-.5;
   });
@@ -1130,14 +1014,10 @@ function buildSchedule(maxAttempts=16){
   ST.cfg=cfg;
   const N=cfg.n,T=cfg.t,R=cfg.r,rem=N%4,activeN=N-rem;
   const wavesPerRound=Math.max(1,Math.ceil(activeN/(T*4)));
-  // Calcul des tailles de vagues (répartition équilibrée)
   const waveSizes=[];{let rem2=activeN;for(let w=0;w<wavesPerRound;w++){const sz=Math.min(T*4,Math.round(rem2/(wavesPerRound-w)/4)*4||4);waveSizes.push(Math.max(4,sz));rem2-=sz;}}
   let bestSched=null,bestScore=Infinity;
-
   for(let att=0;att<maxAttempts;att++){
     const pairCount={},oppCount={},lastPartnerRound={},byeCount={},playCount={};
-    // lastWaveIdx[id] = indice de la dernière vague jouée par ce joueur (au tour précédent)
-    // Permet de prioriser ceux qui ont joué en dernière vague → ils attendent le plus
     const lastWaveIdx={};
     const players=ST.players.slice(0,N).map(p=>p.id);
     players.forEach(id=>{byeCount[id]=0;playCount[id]=0;lastWaveIdx[id]=-1;});
@@ -1147,35 +1027,22 @@ function buildSchedule(maxAttempts=16){
     else pool=shuffle(pool);
     const orderedIds=pool.map(p=>p.id);
     const sched=[];let totalRelax=0;
-    // earlyPlayedInRound[r] = Set des joueurs ayant joué un match anticipé comptant pour le tour r
-    // Ces joueurs ne jouent PAS de match normal au tour r (le match anticipé est leur match)
     const earlyPlayedInRound={};
-
     for(let r=0;r<R;r++){
-      // ── Remplaçants : 1) le moins de matchs joués, 2) le plus de byes déjà subis,
-      //    3) niveau le plus faible (débutants remplaçants en priorité), 4) aléatoire
       let subs=[];
       if(rem>0){
         const sorted=[...orderedIds].sort((a,b)=>{
           if(playCount[b]!==playCount[a])return playCount[b]-playCount[a];
           if(byeCount[a]!==byeCount[b])return byeCount[a]-byeCount[b];
-          // priorité aux joueurs de plus faible niveau (débutants d'abord)
           if(pLv(a)!==pLv(b))return pLv(a)-pLv(b);
           return Math.random()-.5;
         });
         subs=sorted.slice(0,rem);
       }
       const subsSet=new Set(subs);subs.forEach(id=>byeCount[id]++);
-
-      // Joueurs ayant déjà joué leur match anticipé pour CE tour → exclus des vagues normales
       const alreadyEarly=earlyPlayedInRound[r]||new Set();
-
-      // ── Tri des actifs pour minimiser l'attente :
-      // Les joueurs ayant joué en DERNIÈRE vague au tour précédent sont prioritaires
-      // pour jouer en PREMIÈRE vague à ce tour (ils ont attendu le plus longtemps).
       const activeRaw=orderedIds.filter(id=>!subsSet.has(id)&&!alreadyEarly.has(id));
       const active=shuffle(activeRaw).sort((a,b)=>lastWaveIdx[b]-lastWaveIdx[a]);
-
       const waves=[];let offset=0;
       for(let w=0;w<wavesPerRound;w++){
         const wsize=waveSizes[w]||waveSizes[waveSizes.length-1];
@@ -1183,22 +1050,14 @@ function buildSchedule(maxAttempts=16){
         if(group.length<4)continue;
         const ms=makeMatchesStrict(group,pairCount,oppCount,lastPartnerRound,r,cfg);
         ms.forEach(m=>{if(m._relaxed)totalRelax++;});
-        // Mise à jour lastWaveIdx pour chaque joueur de cette vague
         group.forEach(id=>{playCount[id]=(playCount[id]||0)+1;lastWaveIdx[id]=w;});
         waves.push({matches:ms,waveIdx:w,waveTime:'',_isEarlyWave:false});
       }
-
-      // ── Matchs anticipés (terrains libres)
-      // Règle absolue : un joueur qui joue un match anticipé pour le tour R+1
-      //   1. N'a PAS joué de match normal dans aucune vague du tour courant R
-      //   2. Ne jouera PAS de match normal au tour R+1 (son anticipé EST son match)
       if(r+1<R){
-        // Tous les joueurs ayant joué dans n'importe quelle vague normale de ce tour
         const alreadyPlayedThisRound=new Set(
           waves.filter(wv=>!wv._isEarlyWave)
                .flatMap(wv=>wv.matches.flatMap(m=>[m.pA1,m.pA2,m.pB1,m.pB2]))
         );
-        // Préfigurer les remplaçants du tour suivant (pour ne pas les anticiper)
         let futureSubs=new Set();
         if(rem>0){
           const sorted=[...orderedIds].sort((a,b)=>{
@@ -1209,8 +1068,6 @@ function buildSchedule(maxAttempts=16){
           });
           sorted.slice(0,rem).forEach(id=>futureSubs.add(id));
         }
-        // Candidats globaux : n'ont PAS joué ce tour, ne sont pas remplaçants tour suivant
-        // et ne sont pas déjà retenus pour un autre anticipé ce tour
         const globalEarlyUsed=new Set();
         const normalWaves=waves.filter(wv=>!wv._isEarlyWave);
         for(let nwi=0;nwi<normalWaves.length;nwi++){
@@ -1245,8 +1102,6 @@ function buildSchedule(maxAttempts=16){
     }
     if(totalRelax<bestScore){bestScore=totalRelax;bestSched=sched;if(totalRelax===0)break;}
   }
-
-  // ── Calcul des horaires
   let currentTime=cfg.start;
   bestSched.forEach((rd,ri)=>{
     rd.roundTime=currentTime;
@@ -1261,16 +1116,11 @@ function buildSchedule(maxAttempts=16){
 
 window.regenerateLocal = function(){ if(buildSchedule()) renderGen(); };
 
-// ══════════════════════════════════════════════════════════
-// PAGE 3 — PLANNING PREVIEW
-// ══════════════════════════════════════════════════════════
 function pName(id){const p=ST.players.find(x=>x.id===id);return p?p.name:'?';}
 function pObj(id){return ST.players.find(x=>x.id===id);}
 
 function renderGen(){
   const {n,t,r,mt,tt,tp,start}=ST.cfg;const p=computeScheduleParams(ST.cfg);
-  // playCount : chaque joueur doit jouer exactement r matchs (les anticipés remplacent un match normal)
-  // On compte tous les matchs de toutes les vagues — chaque apparition = 1 match joué
   const playCount={};ST.players.slice(0,n).forEach(pl=>playCount[pl.id]=0);
   ST.schedule.forEach(rd=>rd.waves.forEach(wv=>wv.matches.forEach(m=>[m.pA1,m.pA2,m.pB1,m.pB2].forEach(id=>{playCount[id]=(playCount[id]||0)+1;}))));
   const pVals=Object.values(playCount);const maxPlay=Math.max(...pVals),minPlay=Math.min(...pVals);
@@ -1283,12 +1133,9 @@ function renderGen(){
   let totalLvDiff=0,matchCount=0,earlyCount=0,relaxCount=0;
   ST.schedule.forEach(rd=>rd.waves.forEach(wv=>{if(wv._isEarlyWave)earlyCount+=wv.matches.length;wv.matches.forEach(m=>{if(m._relaxed)relaxCount++;const lvA=pLv(m.pA1)+pLv(m.pA2),lvB=pLv(m.pB1)+pLv(m.pB2);totalLvDiff+=Math.abs(lvA-lvB);matchCount++;});}));
   const avgLvDiff=matchCount>0?(totalLvDiff/matchCount).toFixed(2):0;
-
-  // ── Analyse de l'attente maximale entre 2 matchs consécutifs d'un même joueur
-  // On reconstruit la séquence de vagues (tour*wavesPerRound + waveIdx) pour chaque joueur
   let maxWait=0, waitViolations=0;
   if(p.wavesPerRound>1){
-    const playerSeq={}; // id → [globalWaveIndex, ...]
+    const playerSeq={};
     ST.players.slice(0,n).forEach(pl=>playerSeq[pl.id]=[]);
     let globalWave=0;
     ST.schedule.forEach((rd,ri)=>{
@@ -1313,7 +1160,6 @@ function renderGen(){
     });
   }
   const waitOk=p.wavesPerRound<=1||maxWait<=1;
-
   const ccb=document.getElementById('ccBox');
   if(ccb)ccb.innerHTML=`
     <div class="cc-row"><span class="cc-ico">${p.rem===0?'✅':'ℹ️'}</span><span class="cc-lbl">Tous jouent à chaque tour</span><span class="cc-badge ${p.rem===0?'ccb-ok':'ccb-info'}">${p.rem===0?'Oui':p.rem+' remplaçant(s)/tour'}</span></div>
@@ -1332,9 +1178,6 @@ function renderGen(){
   }).join('');
 }
 
-// ══════════════════════════════════════════════════════════
-// PAGE 4 — TOURNOI
-// ══════════════════════════════════════════════════════════
 function renderTournament(){ renderRoundTabs();renderMatches();renderSubInfo();renderMiniStandings();updateTimerDisplay();checkDone(); }
 
 function renderRoundTabs(){
@@ -1358,9 +1201,7 @@ function renderSubInfo(){
 function renderMatches(){
   const round=ST.schedule[ST.activeRound];const el=document.getElementById('mList');if(!round||!el)return;
   const mkP=(id)=>{const p=pObj(id);const idx=ST.players.findIndex(x=>x.id===id);return p?`<span data-playeridx="${idx}">${p.name}</span>`:'?';};
-  // Bouton substitution uniquement pour admin
   const mkSubBtn=(id)=>isAdmin()?`<button class="psub-btn" title="Remplacer ce joueur" onclick="openSub('${id}')">↔</button>`:'';
-  // Bouton édition nom visible pour scorer+admin (en mode tournoi)
   const mkEditBtn=(id,idx)=>isScorer()?`<button class="pedit" title="Modifier le nom" onclick="editPlayerName(${idx})">✏️</button>`:'';
   const normalRdWaves=round.waves.filter(wv=>!wv._isEarlyWave);
   const sortedRdWaves=[];
@@ -1411,9 +1252,6 @@ function renderMatches(){
     }).join('')}`).join('');
 }
 
-// ══════════════════════════════════════════════════════════
-// SUBSTITUTION UI (admin uniquement)
-// ══════════════════════════════════════════════════════════
 window.openSub = function(playerId){
   if(!isAdmin()){ alert("Les substitutions sont réservées à l'admin."); return; }
   ST.sub={targetId:playerId,selId:null};
@@ -1427,30 +1265,27 @@ window.openSub = function(playerId){
     :'<div class="txt-muted" style="padding:8px">Aucun remplaçant disponible.</div>';
   document.getElementById('subModal').classList.add('open');
 };
+
 window.selectSub = function(id,el){
   ST.sub.selId=id;
   document.querySelectorAll('.sub-item').forEach(x=>x.classList.remove('sel'));
   el.classList.add('sel');
 };
+
 window.closeSubModal = function(){ document.getElementById('subModal').classList.remove('open'); };
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('subModal').addEventListener('click',e=>{if(e.target===document.getElementById('subModal'))closeSubModal();});
 });
 
-// ══════════════════════════════════════════════════════════
-// CLASSEMENT
-// ══════════════════════════════════════════════════════════
 function computeStandings(){
   const stats={};
   ST.players.slice(0,ST.cfg.n).forEach(p=>{stats[p.id]={id:p.id,name:p.name,g:p.g,lv:p.lv,pts:0,w:0,d:0,l:0,gf:0,ga:0,played:0,byeTours:0,h2h:{}};});
-  // Compensation bye : chaque tour en tant que remplaçant = +2 pts (match nul fictif 0-0)
   ST.schedule.forEach(rd=>rd.subs.forEach(id=>{
     if(!stats[id])return;
     stats[id].byeTours++;
-    stats[id].pts+=2;   // équivalent match nul
-    stats[id].d++;      // compté comme nul
-    stats[id].played++; // compté comme match joué
-    // gf et ga restent à 0 (score fictif 0-0)
+    stats[id].pts+=2;
+    stats[id].d++;
+    stats[id].played++;
   }));
   ST.schedule.forEach((round,r)=>round.waves.forEach((wv,w)=>wv.matches.forEach((m,mi)=>{
     const res=getRes(r,w,mi);if(res.ga===''||res.gb==='')return;
@@ -1471,11 +1306,9 @@ function stblHTML(arr,limit){
   }).join('');
   return `<thead><tr><th>#</th><th style="text-align:left">Joueur</th><th title="Matchs joués">J</th><th style="color:var(--grn)">V</th><th style="color:var(--ylw)">N</th><th style="color:var(--red)">D</th><th>BP</th><th>BC</th><th>+/-</th><th style="color:var(--grn)">Pts</th></tr></thead><tbody>${rows}</tbody>`;
 }
+
 function renderMiniStandings(){ const el=document.getElementById('miniStbl');if(el)el.innerHTML=stblHTML(computeStandings()); }
 
-// ══════════════════════════════════════════════════════════
-// PAGE 5 — FINAL
-// ══════════════════════════════════════════════════════════
 function renderFinal(){
   const st=computeStandings();
   const med=[{cls:'pod-1',ico:'🥇'},{cls:'pod-2',ico:'🥈'},{cls:'pod-3',ico:'🥉'}];
@@ -1497,9 +1330,6 @@ function renderFinal(){
   if(pt)pt.innerHTML=`<div style="font-size:11px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--bdr)">🟢 Vert = victoire · 🔴 Rouge = défaite · Gris = non joué</div>${rows}`;
 }
 
-// ══════════════════════════════════════════════════════════
-// TIMER (scorer + admin)
-// ══════════════════════════════════════════════════════════
 function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 function updateTimerDisplay(){
   const el=document.getElementById('tmrDsp');if(!el)return;
@@ -1507,6 +1337,7 @@ function updateTimerDisplay(){
   el.className='timer-big '+(ST.timerSec===0?'tc-zero':ST.timerMode==='match'?'tc-match':'tc-trans');
   document.getElementById('tmrLbl').textContent=ST.timerMode==='match'?`⏱ TEMPS DE JEU — ${ST.cfg.mt} min`:`⏸ TRANSITION — ${ST.timerMode==='trans'?ST.cfg.tt:ST.cfg.tp} min`;
 }
+
 window.startTimer = function(mode){
   clearInterval(ST.timerIv);ST.timerMode=mode;
   const secs=mode==='match'?ST.cfg.mt:mode==='trans'?ST.cfg.tt:ST.cfg.tp;
@@ -1514,17 +1345,15 @@ window.startTimer = function(mode){
   document.getElementById('tmrP').style.display='';document.getElementById('tmrR').style.display='none';
   ST.timerIv=setInterval(()=>{if(ST.timerSec>0){ST.timerSec--;updateTimerDisplay();}else{clearInterval(ST.timerIv);ST.timerRun=false;document.getElementById('tmrP').style.display='none';}},1000);
 };
+
 window.pauseTimer = function(){clearInterval(ST.timerIv);ST.timerRun=false;document.getElementById('tmrP').style.display='none';document.getElementById('tmrR').style.display='';};
 window.resumeTimer = function(){
   document.getElementById('tmrP').style.display='';document.getElementById('tmrR').style.display='none';
   ST.timerIv=setInterval(()=>{if(ST.timerSec>0){ST.timerSec--;updateTimerDisplay();}else{clearInterval(ST.timerIv);ST.timerRun=false;document.getElementById('tmrP').style.display='none';}},1000);
 };
 
-// ══════════════════════════════════════════════════════════
-// IMPRESSION (identique v5)
-// ══════════════════════════════════════════════════════════
 function _pSubBadge(s){return s.byeTours>0?' <span style="background:#fef6e4;color:#d4890a;border:1px solid #f0d090;border-radius:10px;padding:1px 6px;font-size:10px">&#x1F7E1;x'+s.byeTours+'</span>':'';}
-function _pRankRows(arr,pad){var med=['&#x1F947;','&#x1F948;','&#x1F949;'];var p=pad||'5px 6px';return arr.map(function(s,i){var gd=s.gf-s.ga;var gdCol=gd>=0?'#1e8c45':'#c0281a';var rkCol=i<3?'#1e8c45':'#888';return '<tr style="border-bottom:1px solid #eee"><td style="padding:'+p+';text-align:center;font-weight:700;color:'+rkCol+'">'+(med[i]||i+1)+'</td><td style="padding:'+p+';font-weight:600">'+s.name+_pSubBadge(s)+'</td><td style="padding:'+p+';text-align:center;color:#888">'+s.played+'</td><td style="padding:'+p+';text-align:center;color:#1e8c45;font-weight:700">'+s.w+'</td><td style="padding:'+p+';text-align:center;color:#d4890a">'+s.d+'</td><td style="padding:'+p+';text-align:center;color:#c0281a">'+s.l+'</td><td style="padding:'+p+';text-align:center">'+s.gf+'</td><td style="padding:'+p+';text-align:center">'+s.ga+'</td><td style="padding:'+p+';text-align:center;color:'+gdCol+'">'+(gd>0?'+':'')+gd+'</td><td style="padding:'+p+';text-align:center;font-weight:900;font-size:14px;color:#1e8c45">'+s.pts+'</td></tr>';}).join('');}
+function _pRankRows(arr,pad){var med=['&#x1F947;','&#x1F948;','&#x1F949;'];var p=pad||'5px 6px';return arr.map(function(s,i){var gd=s.gf-s.ga;var gdCol=gd>=0?'#1e8c45':'#c0281a';var rkCol=i<3?'#1e8c45':'#888';return '<tr style="border-bottom:1px solid #eee"><td style="padding:'+p+';text-align:center;font-weight:700;color:'+rkCol+'">'+(med[i]||i+1)+'</td><td style="padding:'+p+';font-weight:600">'+s.name+_pSubBadge(s)+'</td><td style="padding:'+p+';text-align:center;color:#888">'+s.played+'</td><td style="padding:'+p+';text-align:center;color:#1e8c45;font-weight:700">'+s.w+'</td><td style="padding:'+p+';text-align:center;color:#d4890a">'+s.d+'</td><td style="padding:'+p+';text-align:center;color:#c0281a">'+s.l+'</td><td style="padding:'+p+';text-align:center">'+s.gf+'</td><td style="padding:'+p+';text-align:center">'+s.ga+'</td><td style="padding:'+p+';text-align:center;color:'+gdCol+'">'+(gd>0?'+':'')+gd+'</td><td style="padding:'+p+';text-align:center;font-weight:900;font-size:14px;color:#1e8c45">'+s.pts+'</td><tr>';}).join('');}
 function _pRankTable(arr,pad){return '<table><thead><tr><th>#</th><th style="text-align:left">Joueur</th><th>J</th><th style="color:#5ad080">V</th><th style="color:#ffd080">N</th><th style="color:#ff8070">D</th><th>BP</th><th>BC</th><th>+/-</th><th style="color:#5ad080">Pts</th></tr></thead><tbody>'+_pRankRows(arr,pad)+'</tbody></table>';}
 function _pMatchRow(m,mi,ri,wi,showScore){var row='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#fff;border:1px solid #ddd;border-radius:4px;margin-bottom:3px;font-family:sans-serif;font-size:12px">';row+='<span style="font-weight:700;color:#888;min-width:26px">T'+(mi+1)+'</span>';row+='<span style="font-weight:700;flex:1">'+pName(m.pA1)+' + '+pName(m.pA2)+'</span>';if(showScore){var res=getRes(ri,wi,mi);var done=res.ga!==''&&res.gb!=='';var cA=done?(res.ga>res.gb?'#1e8c45':'#c0281a'):'#999';var cB=done?(res.gb>res.ga?'#1e8c45':'#c0281a'):'#999';row+='<span style="font-size:17px;font-weight:900;color:'+cA+';min-width:26px;text-align:center">'+(done?res.ga:'__')+'</span><span style="color:#888;font-weight:700">&#8211;</span><span style="font-size:17px;font-weight:900;color:'+cB+';min-width:26px;text-align:center">'+(done?res.gb:'__')+'</span>';}else{row+='<span style="color:#aaa;font-weight:700;padding:0 6px">VS</span>';}row+='<span style="font-weight:700;flex:1;text-align:right">'+pName(m.pB1)+' + '+pName(m.pB2)+'</span></div>';return row;}
 function _pWaveBlock(wv,wi,nWaves,ri,showScore){var h='';if(nWaves>1)h='<div style="font-size:11px;font-weight:700;color:#555;margin:7px 0 3px">Vague '+(wi+1)+' &middot; '+wv.waveTime+'</div>';else h='<div style="font-size:11px;color:#888;margin-bottom:4px">'+wv.waveTime+'</div>';wv.matches.forEach(function(m,mi){h+=_pMatchRow(m,mi,ri,wi,showScore);});return h;}
@@ -1535,9 +1364,45 @@ window.printCurrentRound = function(){var ri=ST.activeRound;var rd=ST.schedule[r
 window.printFinal = function(){var st=computeStandings();var med=['1er','2e','3e'];var brd=['#d4a820','#909ab8','#c08050'];var bbg=['#fffbe8','#f5f5f8','#fff8f4'];var podHTML='<div style="display:flex;gap:12px;justify-content:center;margin-bottom:22px;flex-wrap:wrap">';st.slice(0,3).forEach(function(s,i){podHTML+='<div style="text-align:center;padding:14px 18px;border:2px solid '+brd[i]+';border-radius:10px;min-width:130px;background:'+bbg[i]+'"><div style="font-size:22px;font-weight:700;color:'+brd[i]+'">'+med[i]+'</div><div style="font-size:16px;font-weight:700;margin:5px 0">'+s.name+'</div><div style="font-size:26px;font-weight:900;color:#1e8c45">'+s.pts+'</div><div style="font-size:11px;color:#888">'+s.w+'V &middot; '+s.d+'N &middot; '+s.l+'D</div></div>';});podHTML+='</div>';var body='<div style="font-size:20px;font-weight:700;margin-bottom:14px;border-bottom:3px solid #1a1410;padding-bottom:10px">Classement Final &mdash; Pickleball Americano &middot; '+ST.cfg.n+' joueurs &middot; '+ST.cfg.r+' tours</div>';body+=podHTML;body+=_pRankTable(st);body+='<div style="margin-top:8px;font-size:10px;color:#888">Departage : 1. Points &middot; 2. Goal-average general &middot; 3. G-A particulier &middot; 4. Buts marques &middot; 5. Victoires &middot; 6. Matchs joues</div>';_pOpenWindow('final','Classement Final - Pickleball Americano',body);};
 window.printAllResults = function(){var st=computeStandings();var body='<div style="font-size:17px;font-weight:700;margin-bottom:12px;border-bottom:2px solid #333;padding-bottom:8px">Pickleball Americano &mdash; Resultats complets &middot; '+ST.cfg.n+' joueurs &middot; '+ST.cfg.r+' tours</div>';ST.schedule.forEach(function(rd,ri){body+=_pRoundBlock(rd,ri,true);});body+='<div style="page-break-before:always"><div style="font-size:15px;font-weight:700;margin-bottom:10px;border-bottom:2px solid #333;padding-bottom:6px">Classement Final</div>'+_pRankTable(st,'4px 5px')+'</div>';_pOpenWindow('all','Resultats complets - Pickleball Americano',body);};
 
-// Init
 window.onCfgChange && onCfgChange();
 
+window.toggleMobileMenu = function(){
+  const btn     = document.getElementById('menuHamburger');
+  const drawer  = document.getElementById('mobileDrawer');
+  const overlay = document.getElementById('menuOverlay');
+  const isOpen  = drawer.classList.contains('open');
+  if(isOpen){ closeMobileMenu(); }
+  else {
+    btn.classList.add('open');
+    drawer.classList.add('open');
+    overlay.classList.add('open');
+    syncDrawerButtons();
+  }
+};
+window.closeMobileMenu = function(){
+  document.getElementById('menuHamburger').classList.remove('open');
+  document.getElementById('mobileDrawer').classList.remove('open');
+  document.getElementById('menuOverlay').classList.remove('open');
+};
+function syncDrawerButtons(){
+  const pairs = [
+    ['liveBtn',   'drawerLiveBtn'],
+    ['adminBtn',  'drawerAdminBtn'],
+    ['backBtn',   'drawerBackBtn'],
+    ['logoutBtn', 'drawerLogoutBtn'],
+  ];
+  pairs.forEach(([deskId, drawId])=>{
+    const desk = document.getElementById(deskId);
+    const draw = document.getElementById(drawId);
+    if(desk && draw) draw.style.display = desk.style.display === 'none' ? 'none' : '';
+  });
+}
+window.addEventListener('resize', ()=>{ if(window.innerWidth > 767) closeMobileMenu(); });
+document.addEventListener('DOMContentLoaded', ()=>{
+  if(typeof onCfgChange==='function') onCfgChange();
+  const si = document.getElementById('spectatorInfo');
+  if(si) si.style.display = 'none';
+});
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1580,14 +1445,12 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--ink);min-he
 .hdr-r{margin-left:auto;display:flex;gap:8px;align-items:center}
 .hdr-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:12px;font-weight:600;transition:all .15s;letter-spacing:.3px;min-height:36px}
 .hdr-btn:hover{background:rgba(255,255,255,.22)}
-/* HAMBURGER */
 .hdr-menu-btn{display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:42px;height:42px;border-radius:8px;cursor:pointer;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0;flex-shrink:0;transition:background .15s}
 .hdr-menu-btn:hover{background:rgba(255,255,255,.25)}
 .hdr-menu-btn span{display:block;width:20px;height:2px;background:#fff;border-radius:2px;transition:all .25s}
 .hdr-menu-btn.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
 .hdr-menu-btn.open span:nth-child(2){opacity:0;transform:scaleX(0)}
 .hdr-menu-btn.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
-/* DRAWER */
 .hdr-drawer{display:none;position:fixed;top:58px;right:0;width:240px;background:var(--ink);border-left:1px solid rgba(255,255,255,.15);border-bottom:1px solid rgba(255,255,255,.15);border-radius:0 0 0 14px;box-shadow:-4px 4px 24px rgba(0,0,0,.4);z-index:299;flex-direction:column;padding:8px;gap:4px}
 .hdr-drawer.open{display:flex;animation:drawerIn .2s ease}
 @keyframes drawerIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
@@ -1597,20 +1460,14 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--ink);min-he
 .hdr-drawer-sep{height:1px;background:rgba(255,255,255,.1);margin:4px 0}
 .hdr-drawer-overlay{display:none;position:fixed;inset:0;z-index:298}
 .hdr-drawer-overlay.open{display:block}
-
-/* ADMIN PANEL */
 .admin-panel{background:var(--ink);color:#fff;padding:16px 20px;border-bottom:2px solid rgba(255,255,255,.1)}
 .admin-panel-ttl{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:1px;color:var(--ylw);margin-bottom:12px}
-
-/* SPECTATOR NAV BAR */
 .spec-nav{display:none;background:var(--ink2);border-bottom:3px solid #4a6080;padding:0 16px}
 .spec-nav.visible{display:flex;gap:0;align-items:center}
 .spec-nav-btn{padding:13px 22px;font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.55);background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;transition:all .15s;margin-bottom:-3px;display:flex;align-items:center;gap:7px}
 .spec-nav-btn:hover{color:rgba(255,255,255,.85)}
 .spec-nav-btn.spec-nav-active{color:#ffd080;border-bottom-color:#ffd080}
 .spec-nav-live-dot{width:7px;height:7px;border-radius:50%;background:#ff4444;animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
-
-/* STEPS */
 .steps{background:var(--s0);border-bottom:2px solid var(--bdr);padding:10px 20px;display:flex;align-items:center;overflow-x:auto;gap:0}
 .step{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);white-space:nowrap;cursor:pointer}
 .step-txt{display:inline}
@@ -1620,27 +1477,19 @@ body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--ink);min-he
 .step.done .step-n{background:var(--muted);border-color:var(--muted);color:#fff}
 .step-ln{width:24px;height:2px;background:var(--bdr);margin:0 4px;flex-shrink:0}
 .step-ln.done{background:var(--muted)}
-
-/* PAGES */
 .page{display:none;animation:fadeIn .2s ease}.page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .wrap{max-width:980px;margin:0 auto;padding:24px 16px 80px}
-
-/* CARDS */
 .sec-ttl{font-family:'Oswald',sans-serif;font-size:24px;letter-spacing:1px;color:var(--ink2);margin-bottom:18px;display:flex;align-items:center;gap:10px}
 .sec-ttl::after{content:'';flex:1;height:2px;background:var(--bdr)}
 .card{background:var(--s0);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
 .card+.card,.card+.info,.info+.card{margin-top:14px}
 .card-ttl{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:1px;color:var(--ink2);margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--bdr);display:flex;align-items:center;gap:8px}
-
-/* FORMS */
 .fg{display:grid;gap:13px}.fr{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}
 .fr3{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end}
 label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:5px}
 input[type=text],input[type=number],input[type=time],input[type=email],input[type=password],select,textarea{width:100%;padding:9px 12px;background:var(--s1);border:1.5px solid var(--bdr);border-radius:8px;font-family:'Exo 2',sans-serif;font-size:14px;color:var(--ink);outline:none;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{border-color:var(--grn)}
-
-/* BUTTONS */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border:none;border-radius:8px;font-family:'Oswald',sans-serif;font-size:15px;letter-spacing:.8px;cursor:pointer;transition:all .15s;text-transform:uppercase}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn-g{background:var(--grn);color:#fff}.btn-g:hover:not(:disabled){background:var(--grn2);box-shadow:0 4px 14px rgba(30,140,69,.3)}
@@ -1649,20 +1498,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .btn-b{background:var(--blu);color:#fff}.btn-b:hover:not(:disabled){background:#155290}
 .btn-ghost{background:var(--s2);color:var(--ink);border:1px solid var(--bdr)}.btn-ghost:hover{background:var(--s3)}
 .btn-sm{padding:6px 14px;font-size:13px}.btn-xs{padding:4px 10px;font-size:12px}
-
-/* INFO BOXES */
 .info{border-radius:var(--r);padding:14px 18px;font-size:13px;color:var(--muted);line-height:1.8;border:1px solid}
 .info-g{background:var(--grn-bg);border-color:#b8ddc8;border-left:4px solid var(--grn);color:var(--grn2)}
 .info-y{background:var(--ylw-bg);border-color:#f0d090;border-left:4px solid var(--ylw);color:#7a4a00}
 .info-r{background:var(--red-bg);border-color:#f0b0a8;border-left:4px solid var(--red);color:#8a1810}
 .info-b{background:var(--blu-bg);border-color:#a8c8f0;border-left:4px solid var(--blu);color:#0a3a6a}
 .info strong{font-weight:700;color:inherit}
-
-/* PROGRESS */
 .prog{height:6px;background:var(--s2);border-radius:3px;overflow:hidden;margin-top:5px}
 .prog-f{height:100%;background:linear-gradient(90deg,var(--grn),#5ad080);border-radius:3px;transition:width .3s}
-
-/* PLAYER LIST */
 .prow{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s1);border:1px solid var(--bdr);border-radius:8px;margin-bottom:5px;transition:background .1s}
 .prow:hover{background:var(--s2)}
 .p-idx{font-family:'Oswald',sans-serif;font-size:14px;color:var(--dim);min-width:24px;text-align:right}
@@ -1677,8 +1520,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .pedit:hover{background:var(--blu-bg);border-color:var(--blu)}
 .psub-btn{background:none;border:1.5px solid var(--bdr2);color:var(--ylw);cursor:pointer;font-size:11px;font-weight:700;padding:3px 8px;border-radius:5px;font-family:'Oswald',sans-serif;letter-spacing:.5px;transition:all .1s}
 .psub-btn:hover{background:var(--ylw);color:#fff}
-
-/* SCHEDULE */
 .round-block{margin-bottom:18px;border:1.5px solid var(--bdr);border-radius:var(--r);overflow:hidden}
 .round-hdr{background:var(--s1);padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bdr)}
 .round-hdr-ttl{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:1px;color:var(--ink2)}
@@ -1690,8 +1531,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .rp-court{font-weight:700;color:var(--dim);min-width:26px;font-family:'Oswald',sans-serif}
 .rp-pair{font-weight:700;color:var(--ink)}.rp-vs{color:var(--dim);font-weight:700;margin:0 4px}
 .sub-badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:var(--ylw-bg);color:var(--ylw);border:1px solid #f0d090;margin-left:4px}
-
-/* ROUND TABS */
 .rtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
 .rtab{padding:6px 14px;border-radius:6px;border:1.5px solid var(--bdr);background:var(--s1);font-family:'Oswald',sans-serif;font-size:14px;cursor:pointer;color:var(--muted);transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:2px}
 .rtab:hover{border-color:var(--grn);color:var(--grn)}
@@ -1699,13 +1538,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .rtab.done{background:var(--grn-bg);border-color:var(--grn);color:var(--grn)}
 .rtab.done.active{background:var(--grn);color:#fff}
 .rtab-time{font-size:10px;opacity:.7;font-family:'Exo 2',sans-serif;font-weight:400;letter-spacing:0}
-
-/* WAVE SEP */
 .wave-sep{background:var(--s1);border:1px solid var(--bdr);border-radius:7px;padding:8px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
 .wave-sep-lbl{font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.8px;color:var(--blu)}
 .wave-time-lbl{font-size:12px;color:var(--muted)}
-
-/* MATCH CARD */
 .mc{background:var(--s0);border:1.5px solid var(--bdr);border-radius:var(--r);padding:14px 16px;margin-bottom:8px;display:grid;grid-template-columns:1fr 56px 28px 56px 1fr;align-items:center;gap:8px;transition:all .15s}
 .mc:hover{border-color:var(--grn);box-shadow:0 2px 10px rgba(30,140,69,.1)}
 .mc.done-mc{background:var(--grn-bg);border-color:#b8ddc8}
@@ -1713,17 +1548,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .mt-nm{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.5px;color:var(--ink2)}
 .mt-detail{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
 .mt-r{text-align:right}
-/* SCORE INPUT — desktop */
-.sinp{width:62px;height:52px;text-align:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;padding:0;-webkit-user-select:text;user-select:text}
-.sinp:focus{border-color:var(--blu);box-shadow:0 0 0 3px rgba(80,140,255,.18)}
-.sinp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
-.sinp::placeholder{color:var(--dim);font-size:20px}
-/* SCORE DISPLAY — mobile (remplace l'input) */
 .sdsp{width:62px;height:52px;display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:26px;background:var(--s1);border:2px solid var(--bdr);border-radius:10px;color:var(--dim);cursor:pointer;transition:border-color .15s;-webkit-tap-highlight-color:transparent;user-select:none}
 .sdsp.win-s{border-color:var(--grn);color:var(--grn);background:var(--grn-bg)}
 .sdsp.has-val{color:var(--ink)}
 .sdsp:active{border-color:var(--blu);background:var(--s2)}
-/* KEYPAD MODAL */
 .kp-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;align-items:flex-end;justify-content:center}
 .kp-box{background:var(--ink2);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));width:100%;max-width:400px;box-shadow:0 -6px 30px rgba(0,0,0,.5)}
 .kp-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -1737,16 +1565,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .kp-k.kp-ok{background:var(--grn);color:#fff;font-size:16px;font-weight:800;letter-spacing:.5px}
 .kp-k.kp-ok:active{background:#1e8a44}
 .vs-lbl{text-align:center;font-size:11px;font-weight:700;color:var(--dim)}
-
-/* TIMER */
 .timer-wrap{background:var(--ink2);border-radius:var(--r);padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;box-shadow:var(--shadow2)}
 .timer-lbl{font-size:10px;letter-spacing:2px;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:4px}
 .timer-big{font-family:'Oswald',sans-serif;font-size:64px;line-height:1;letter-spacing:-2px;font-variant-numeric:tabular-nums;transition:color .3s}
 .timer-big.tc-match{color:#5ad080}.timer-big.tc-trans{color:#ffd080}.timer-big.tc-zero{color:#ff7060;animation:blink 1s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
 .timer-btns{display:flex;flex-direction:column;gap:7px;align-items:flex-end}
-
-/* STANDINGS */
 .stbl{width:100%;border-collapse:collapse;font-size:13px}
 .stbl th{padding:9px 8px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);background:var(--s1);border-bottom:2px solid var(--bdr);white-space:nowrap}
 .stbl th:nth-child(2){text-align:left}.stbl td{padding:9px 8px;text-align:center;border-bottom:1px solid var(--bdr)}
@@ -1755,8 +1579,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .pts-c{font-family:'Oswald',sans-serif;font-size:20px;color:var(--grn)}
 .wc{color:var(--grn);font-weight:700}.dc{color:var(--ylw);font-weight:700}.lc{color:var(--red);font-weight:700}
 .gdp{color:var(--grn);font-weight:700}.gdn{color:var(--red);font-weight:700}.played-c{color:var(--muted);font-size:12px}
-
-/* PODIUM */
 .podium{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
 .pod{text-align:center;padding:22px 18px;border-radius:12px;min-width:160px;border:2px solid;transition:transform .2s;cursor:default}
 .pod:hover{transform:translateY(-3px);box-shadow:var(--shadow2)}
@@ -1768,22 +1590,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .pod-detail{font-size:11px;color:var(--muted);margin-bottom:8px}
 .pod-pts{font-family:'Oswald',sans-serif;font-size:36px;color:var(--grn);line-height:1}
 .pod-rec{font-size:12px;color:var(--muted);margin-top:4px}
-
-/* RULES */
 .rules-section{margin-bottom:18px}
 .rules-section h4{font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.8px;color:var(--ink2);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--bdr)}
 .rules-section p,.rules-section li{font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:4px}
 .rules-section ul{padding-left:18px}.rules-section li::marker{color:var(--grn)}
-
-/* CONSTRAINT CHECK */
 .cc-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bdr);font-size:13px}
 .cc-row:last-child{border:none}.cc-ico{font-size:16px;min-width:22px}.cc-lbl{flex:1}
 .cc-badge{padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid}
 .ccb-ok{background:var(--grn-bg);color:var(--grn);border-color:#b8ddc8}
 .ccb-warn{background:var(--ylw-bg);color:var(--ylw);border-color:#f0d090}
 .ccb-info{background:var(--blu-bg);color:var(--blu);border-color:#a8c8f0}
-
-/* MODAL */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;align-items:center;justify-content:center;padding:16px}
 .modal-bg.open{display:flex}
 .modal{background:var(--s0);border:1px solid var(--bdr);border-radius:14px;padding:24px;max-width:460px;width:100%;box-shadow:var(--shadow2);animation:fadeIn .2s ease}
@@ -1792,8 +1608,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .sub-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border:1.5px solid var(--bdr);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:all .15s;background:var(--s1)}
 .sub-item:hover{border-color:var(--ylw);background:var(--ylw-bg)}
 .sub-item.sel{border-color:var(--ylw);background:var(--ylw-bg);box-shadow:0 0 0 2px rgba(212,137,10,.2)}
-
-/* EARLY / RELAXED */
 .rp-early{background:var(--pur-bg)!important;border-left:3px solid var(--pur)!important;}
 .rp-relaxed{border-left:3px solid var(--ylw)!important;}
 .early-tag{background:var(--pur);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;letter-spacing:.3px;margin-left:3px;vertical-align:middle}
@@ -1801,49 +1615,25 @@ input:focus,select:focus,textarea:focus{border-color:var(--grn)}
 .early-badge{background:var(--pur);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:.3px}
 .wave-early{background:var(--pur-bg)!important;border-left:3px solid var(--pur)!important;}
 .wave-sep-early{background:var(--pur-bg)!important;border-color:var(--pur)!important;}
-
-/* HELPERS */
 .flex{display:flex}.fb{justify-content:space-between}.fc{align-items:center}.fw{flex-wrap:wrap}
 .g6{gap:6px}.g8{gap:8px}.g10{gap:10px}.g12{gap:12px}
 .mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt24{margin-top:24px}
 .ovx{overflow-x:auto}.txt-muted{color:var(--muted);font-size:13px}
-
-/* ══════════════════════════════════════════════════════════
-   RESPONSIVE — MOBILE FIRST (v6)
-   ══════════════════════════════════════════════════════════ */
-
-/* ── TOUCH TARGET MINIMUM (accessibilité) ── */
-button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
-  min-height: 44px;
-}
-
-/* ── BASE : petits mobiles (<= 480px) ── */
 @media (max-width: 480px) {
-  /* Header : hamburger actif */
   .hdr { height: auto; min-height: 54px; padding: 8px 12px; }
   .hdr-user { font-size: 11px; max-width: 160px; }
   #hdrDesktopBtns { display: none !important; }
   .hdr-menu-btn { display: flex; }
-
-  /* Login */
   .login-box { padding: 20px 16px; border-radius: 12px; }
   .login-brand { font-size: 24px; }
-
-  /* Contenu */
   .wrap { padding: 14px 10px 70px; }
   .card { padding: 14px 12px; }
   .sec-ttl { font-size: 19px; }
-
-  /* Formulaires */
   .fr { grid-template-columns: 1fr; }
   .fr3 { grid-template-columns: 1fr; gap: 8px; }
   .fr3 > * { grid-column: unset; }
-
-  /* Ajouter joueur : empile le bouton sous les champs */
   .fr3.player-add-row { grid-template-columns: 1fr 60px; }
   .fr3.player-add-row > :nth-child(3) { grid-column: 1 / -1; order: 3; }
-
-  /* Match card : pleine largeur, empilé */
   .mc {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
@@ -1855,111 +1645,70 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   .mc .vs-lbl { display: none; }
   .mc::before { content: 'VS'; display: block; text-align: center; font-size: 11px; font-weight: 700; color: var(--dim); order: 2; }
   .sinp { width: 58px; height: 50px; font-size: 24px; }
-
-  /* Score au centre */
   .mc-score-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
-
-  /* Timer */
   .timer-wrap { flex-direction: column; align-items: center; text-align: center; padding: 14px 12px; gap: 10px; }
   .timer-big { font-size: 52px; }
   .timer-btns { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; }
   .timer-btns .btn { padding: 7px 14px; font-size: 12px; }
-
-  /* Onglets tours : scroll horizontal */
   .rtabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: none; }
   .rtabs::-webkit-scrollbar { display: none; }
   .rtab { flex-shrink: 0; min-width: 54px; padding: 6px 10px; font-size: 12px; }
-
-  /* Spectateur nav : texte raccourci */
   .spec-nav-btn { padding: 10px 12px; font-size: 12px; letter-spacing: .4px; }
-
-  /* Tableau classement : colonnes condensées */
   .stbl { font-size: 11px; }
   .stbl th, .stbl td { padding: 7px 4px; }
-  /* Masquer colonnes secondaires */
-  .stbl th:nth-child(8), .stbl td:nth-child(8),  /* BC */
-  .stbl th:nth-child(7), .stbl td:nth-child(7)   /* BP */
+  .stbl th:nth-child(8), .stbl td:nth-child(8),
+  .stbl th:nth-child(7), .stbl td:nth-child(7)
   { display: none; }
   .rank-c { font-size: 15px; width: 28px; }
   .pts-c  { font-size: 16px; }
-
-  /* Podium */
   .podium { flex-direction: column; align-items: center; gap: 10px; }
   .pod { min-width: 0; width: 100%; max-width: 300px; padding: 16px 14px; }
   .pod-ico { font-size: 30px; }
   .pod-nm  { font-size: 18px; }
   .pod-pts { font-size: 28px; }
-
-  /* Panneau admin */
   .admin-panel { padding: 12px 12px; }
   #adminPanel > div > div { grid-template-columns: 1fr !important; }
-
-  /* Modal */
   .modal { padding: 18px 14px; }
   .modal-ttl { font-size: 18px; }
-
-  /* Steps */
   .steps { padding: 8px 12px; gap: 0; }
-  .step-txt { display: none; } /* cache le texte, garde juste le chiffre */
+  .step-txt { display: none; }
   .step-n { width: 26px; height: 26px; font-size: 11px; }
-
-  /* Boutons groupés : empile sur mobile */
   .flex.fw.g8 { gap: 6px; }
   .flex.fw.g8 .btn { flex: 1 1 calc(50% - 6px); justify-content: center; }
-
-  /* Round header */
   .round-hdr { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
   .round-hdr-ttl { font-size: 14px; }
-
-  /* Wave blocks */
   .wave-block { padding: 8px 10px; }
-
-  /* Ligne joueur */
   .prow { flex-wrap: wrap; gap: 5px; }
   .p-nm { font-size: 13px; }
   .p-lvl { font-size: 10px; }
-
-  /* Boutons d'impression */
   .print-btn-bar { display: flex; flex-wrap: wrap; gap: 6px; }
   .print-btn-bar .btn { flex: 1 1 calc(50% - 6px); font-size: 12px; padding: 7px 8px; }
 }
-
-/* ── TABLETTE PORTRAIT (481px – 767px) ── */
 @media (min-width: 481px) and (max-width: 767px) {
   .hdr { padding: 0 16px; }
   .hdr-user { max-width: 160px; }
   #hdrDesktopBtns { display: none !important; }
   .hdr-menu-btn { display: flex; }
-
   .wrap { padding: 18px 14px 80px; }
   .fr3 { grid-template-columns: 2fr 80px 80px auto; }
-
   .mc {
     grid-template-columns: 1fr 50px 26px 50px 1fr;
     gap: 6px;
     padding: 11px 12px;
   }
   .sinp { width: 56px; height: 48px; font-size: 23px; }
-
   .timer-big { font-size: 56px; }
   .timer-wrap { flex-direction: column; align-items: center; text-align: center; }
   .timer-btns { flex-direction: row; flex-wrap: wrap; justify-content: center; }
-
   .rtabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .rtabs::-webkit-scrollbar { display: none; }
-
   .podium { gap: 10px; }
   .pod { min-width: 130px; }
-
   .stbl th, .stbl td { padding: 8px 5px; }
   .stbl { font-size: 12px; }
-
   #adminPanel > div > div { grid-template-columns: 1fr !important; }
-
   .spec-nav-btn { padding: 11px 16px; font-size: 13px; }
 }
-
-/* ── TABLETTE PAYSAGE / PETIT DESKTOP (768px – 980px) ── */
 @media (min-width: 768px) and (max-width: 980px) {
   .hdr-user { max-width: 180px; }
   .wrap { padding: 20px 16px 80px; }
@@ -1970,35 +1719,23 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   .fr3 { grid-template-columns: 2fr 90px 90px auto; }
   .timer-wrap { flex-direction: row; }
 }
-
-/* ── GRAND ÉCRAN (> 980px) ── */
 @media (min-width: 981px) {
   .hdr-user { max-width: 220px; }
   .timer-wrap { flex-direction: row; }
 }
-
-/* ── SAFE AREA pour iPhone X et + (notch / home bar) ── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .wrap { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
   .spec-nav { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
   .hdr { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
 }
-
-/* ── Scroll fluide sur iOS ── */
 .ovx, .rtabs, .sub-list { -webkit-overflow-scrolling: touch; }
-
-/* ── Focus visible (accessibilité clavier) ── */
 :focus-visible { outline: 2px solid var(--grn); outline-offset: 2px; border-radius: 4px; }
-
-/* ── Prévenir le zoom iOS sur les inputs ── */
 @media (max-width: 767px) {
   input[type=text], input[type=number], input[type=time],
   input[type=email], input[type=password], select, textarea {
     font-size: 16px;
   }
 }
-
-/* PRINT */
 @media print {
   body{background:#fff!important;color:#000!important;font-size:11px}
   .hdr,.steps,.timer-wrap,.rtabs,.btn,.hdr-btn,.pdel,.pedit,.psub-btn,
@@ -2015,16 +1752,11 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════════════
-     ÉCRAN DE CONNEXION
-     ══════════════════════════════════════════════════════════ -->
 <div id="loginScreen">
   <div class="login-box">
     <div class="login-brand">🏓 Americano</div>
     <div class="login-sub">Pickleball Tournament Manager</div>
     <div id="authMsg" style="text-align:center;font-size:13px;min-height:18px;margin-bottom:12px"></div>
-
-    <!-- ACCÈS RAPIDE SPECTATEUR -->
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
       <div style="text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px">Accès spectateur</div>
       <div style="display:flex;gap:8px">
@@ -2039,13 +1771,10 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
         </button>
       </div>
     </div>
-
     <div style="text-align:center;font-size:11px;color:var(--dim);margin-bottom:16px;position:relative">
       <span style="background:var(--s0);padding:0 10px;position:relative;z-index:1">Connexion staff</span>
       <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--bdr)"></div>
     </div>
-
-    <!-- CONNEXION STAFF -->
     <div class="login-form" id="tabLogin">
       <div>
         <label>Email</label>
@@ -2062,21 +1791,14 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
         Continuer avec Google
       </button>
     </div>
-
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     APPLICATION PRINCIPALE
-     ══════════════════════════════════════════════════════════ -->
 <div id="appScreen" style="display:none">
 
-<!-- HEADER -->
 <header class="hdr">
   <div class="hdr-brand">🏓 Americano</div>
   <div class="hdr-user" id="hdrUserName"></div>
-
-  <!-- Boutons desktop (cachés sur mobile) -->
   <div class="hdr-r" id="hdrDesktopBtns">
     <button class="hdr-btn" id="ruleBtn" onclick="toggleRules()">📋 Règlement</button>
     <button class="hdr-btn" id="liveBtn" data-role="scorer" onclick="goToLive()" style="display:none">📺 Live</button>
@@ -2084,17 +1806,13 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
     <button class="hdr-btn" id="backBtn" style="display:none" onclick="goBack()">← Retour</button>
     <button class="hdr-btn" id="logoutBtn" onclick="logout()">Quitter</button>
   </div>
-
-  <!-- Bouton hamburger (visible sur mobile) -->
   <button class="hdr-menu-btn" id="menuHamburger" onclick="toggleMobileMenu()" aria-label="Menu">
     <span></span><span></span><span></span>
   </button>
 </header>
 
-<!-- Overlay pour fermer le drawer en cliquant dehors -->
 <div class="hdr-drawer-overlay" id="menuOverlay" onclick="closeMobileMenu()"></div>
 
-<!-- Drawer mobile -->
 <div class="hdr-drawer" id="mobileDrawer">
   <button class="hdr-drawer-btn" onclick="closeMobileMenu();toggleRules()">📋 Règlement</button>
   <button class="hdr-drawer-btn" id="drawerLiveBtn" data-role="scorer" onclick="closeMobileMenu();goToLive()" style="display:none">📺 Live</button>
@@ -2104,12 +1822,9 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   <button class="hdr-drawer-btn drawer-danger" id="drawerLogoutBtn" onclick="closeMobileMenu();logout()">⏻ Quitter</button>
 </div>
 
-<!-- PANNEAU ADMIN -->
 <div id="adminPanel" style="display:none">
   <div class="admin-panel">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:960px">
-
-      <!-- Créer un compte -->
       <div>
         <div class="admin-panel-ttl">➕ Créer un compte utilisateur</div>
         <div style="display:flex;flex-direction:column;gap:10px">
@@ -2139,8 +1854,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
           <div id="newUserMsg" style="font-size:13px;min-height:18px"></div>
         </div>
       </div>
-
-      <!-- Changer le rôle d'un compte existant -->
       <div>
         <div class="admin-panel-ttl">🔑 Modifier le rôle d'un compte</div>
         <div style="display:flex;flex-direction:column;gap:10px">
@@ -2167,8 +1880,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
           </div>
         </div>
       </div>
-
-      <!-- Liste des utilisateurs inscrits -->
       <div style="grid-column:1/-1;margin-top:16px;border-top:1px solid rgba(255,255,255,.1);padding-top:16px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           <div class="admin-panel-ttl" style="margin-bottom:0">👥 Utilisateurs inscrits</div>
@@ -2192,12 +1903,10 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
         </div>
         <div style="font-size:11px;color:rgba(255,255,255,.25);margin-top:8px;line-height:1.6">⚠️ La suppression retire l'utilisateur de Firestore. Pour supprimer aussi le compte d'authentification, rendez-vous dans la console Firebase → Authentication.</div>
       </div>
-
     </div>
   </div>
 </div>
 
-<!-- BARRE NAVIGATION SPECTATEUR (masquée pour admin/scorer) -->
 <nav class="spec-nav" id="specNav">
   <button class="spec-nav-btn spec-nav-active" data-target="4" onclick="goTo(4)">
     <span class="spec-nav-live-dot"></span> Live
@@ -2210,7 +1919,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   </button>
 </nav>
 
-<!-- STEPS (admin uniquement) -->
 <nav class="steps" id="stepNav">
   <div class="step active" data-s="1" onclick="goTo(1)"><div class="step-n">1</div><span class="step-txt">Config</span></div>
   <div class="step-ln" id="sl1"></div>
@@ -2223,7 +1931,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
   <div class="step" data-s="5" onclick="goTo(5)"><div class="step-n">5</div><span class="step-txt">Classement</span></div>
 </nav>
 
-<!-- PAGE 1 — CONFIG (admin uniquement) -->
 <div class="page active" id="page1">
 <div class="wrap">
   <div class="sec-ttl">⚙️ Configuration du tournoi</div>
@@ -2271,11 +1978,9 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </div>
 </div>
 
-<!-- PAGE 2 — JOUEURS -->
 <div class="page" id="page2">
 <div class="wrap">
   <div class="sec-ttl">👥 Joueurs</div>
-  <!-- Formulaire ajout : admin seulement -->
   <div class="card" data-role="admin" style="display:none">
     <div class="card-ttl">➕ Ajouter un joueur</div>
     <div class="fr3 player-add-row">
@@ -2305,7 +2010,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </div>
 </div>
 
-<!-- PAGE 3 — PLANNING (admin uniquement) -->
 <div class="page" id="page3">
 <div class="wrap">
   <div class="sec-ttl">📋 Planning généré</div>
@@ -2326,11 +2030,8 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </div>
 </div>
 
-<!-- PAGE 4 — TOURNOI -->
 <div class="page" id="page4">
 <div class="wrap">
-
-  <!-- Timer : visible scorer + admin -->
   <div class="timer-wrap" data-role="scorer">
     <div>
       <div class="timer-lbl" id="tmrLbl">TEMPS DE JEU</div>
@@ -2343,38 +2044,32 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       <button class="btn btn-ghost btn-sm" id="tmrR" onclick="resumeTimer()" style="display:none">▶ Reprendre</button>
     </div>
   </div>
-
-  <!-- Info spectateur -->
   <div class="info info-b" id="spectatorInfo" style="display:none;margin-bottom:16px">
     👁 Mode <strong>Spectateur</strong> — vue en lecture seule, mise à jour en temps réel.
   </div>
-
   <div class="sec-ttl">🏓 Matchs en cours</div>
   <div class="rtabs" id="rTabs"></div>
   <div id="mList"></div>
   <div id="subRoundInfo" class="mt12"></div>
-
   <div class="card mt24">
     <div class="card-ttl">📊 Classement provisoire
       <button class="btn btn-b btn-xs no-print" style="margin-left:auto" onclick="printCurrentRound()">🖨 Imprimer ce tour</button>
     </div>
     <div class="ovx"><table class="stbl" id="miniStbl"></table></div>
   </div>
-
   <div id="btnFinDiv" style="display:none;margin-top:16px">
     <button class="btn btn-g" onclick="goTo(5)">🏆 Classement final →</button>
   </div>
 </div>
 </div>
 
-<!-- PAGE 5 — CLASSEMENT FINAL -->
 <div class="page" id="page5">
 <div class="wrap">
   <div class="sec-ttl">🏆 Classement Final</div>
   <div class="podium" id="podium"></div>
   <div class="card">
     <div class="card-ttl">📋 Classement général</div>
-    <div class="ovx"><table class="stbl" id="finalTbl"></table></div>
+    <div class="ovx"><table class="stbl" id="finalTbl"></tr></div>
     <div style="padding:10px 8px;font-size:11px;color:var(--muted);border-top:1px solid var(--bdr);margin-top:4px">
       Départage : 1. Points · 2. Goal-average général · 3. G-A particulier · 4. Buts marqués · 5. Victoires · 6. Matchs joués
     </div>
@@ -2392,11 +2087,9 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </div>
 </div>
 
-<!-- PAGE RÈGLEMENT -->
 <div class="page" id="pageR">
 <div class="wrap">
   <div class="sec-ttl">📋 Règlement du tournoi</div>
-
   <div class="card">
     <div class="card-ttl">🎯 Format Americano — Principe général</div>
     <div class="rules-section">
@@ -2410,7 +2103,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ul>
     </div>
   </div>
-
   <div class="card mt12">
     <div class="card-ttl">🏓 Le Pickleball — Rappel des règles de base</div>
     <div class="rules-section">
@@ -2458,7 +2150,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ul>
     </div>
   </div>
-
   <div class="card mt12">
     <div class="card-ttl">🏗️ Structure du tournoi</div>
     <div class="rules-section">
@@ -2488,7 +2179,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ul>
     </div>
   </div>
-
   <div class="card mt12">
     <div class="card-ttl">🤝 Formation des paires</div>
     <div class="rules-section">
@@ -2508,7 +2198,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ul>
     </div>
   </div>
-
   <div class="card mt12">
     <div class="card-ttl">🏆 Système de points et classement</div>
     <div class="rules-section">
@@ -2536,7 +2225,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ol>
     </div>
   </div>
-
   <div class="card mt12">
     <div class="card-ttl">⚙️ Modifications en cours de tournoi</div>
     <div class="rules-section">
@@ -2547,7 +2235,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ul>
     </div>
   </div>
-
   <div class="card mt12">
     <div class="card-ttl">🛡️ Sécurité et organisation</div>
     <div class="rules-section">
@@ -2571,7 +2258,6 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
       </ul>
     </div>
   </div>
-
   <div class="mt16 flex g8 fw">
     <button class="btn btn-ghost" onclick="toggleRules()">← Retour</button>
     <button class="btn btn-g" onclick="goTo(4)">📺 Voir le live →</button>
@@ -2579,9 +2265,8 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </div>
 </div>
 
-</div><!-- /appScreen -->
+</div>
 
-<!-- MODAL SUBSTITUTION -->
 <div class="modal-bg" id="subModal">
   <div class="modal">
     <div class="modal-ttl">🔄 Remplacer un joueur</div>
@@ -2596,62 +2281,8 @@ button, .btn, .hdr-btn, .rtab, .spec-nav-btn, .ltab {
 </div>
 
 <script>
-// Afficher l'info spectateur si nécessaire (appelé après applyRoleUI)
-const _origApplyRoleUI = window.applyRoleUI;
-document.addEventListener('DOMContentLoaded', ()=>{
-  // Patch : afficher le bloc info spectateur sur page4
-  const orig = window.goTo;
-  window.goTo = function(n){
-    orig && orig(n);
-    const si = document.getElementById('spectatorInfo');
-    if(si) si.style.display = (n===4 && window.USER_ROLE==='spectator') ? '' : 'none';
-  };
-});
-// init onCfgChange au chargement
-document.addEventListener('DOMContentLoaded', ()=>{ if(typeof onCfgChange==='function') onCfgChange(); });
-
-// ── MENU HAMBURGER MOBILE ────────────────────────────────
-window.toggleMobileMenu = function(){
-  const btn     = document.getElementById('menuHamburger');
-  const drawer  = document.getElementById('mobileDrawer');
-  const overlay = document.getElementById('menuOverlay');
-  const isOpen  = drawer.classList.contains('open');
-  if(isOpen){ closeMobileMenu(); }
-  else {
-    btn.classList.add('open');
-    drawer.classList.add('open');
-    overlay.classList.add('open');
-    // Synchronise les états display des boutons du drawer avec ceux du header
-    syncDrawerButtons();
-  }
-};
-window.closeMobileMenu = function(){
-  document.getElementById('menuHamburger').classList.remove('open');
-  document.getElementById('mobileDrawer').classList.remove('open');
-  document.getElementById('menuOverlay').classList.remove('open');
-};
-function syncDrawerButtons(){
-  // Copie la visibilité des boutons desktop vers le drawer
-  const pairs = [
-    ['liveBtn',   'drawerLiveBtn'],
-    ['adminBtn',  'drawerAdminBtn'],
-    ['backBtn',   'drawerBackBtn'],
-    ['logoutBtn', 'drawerLogoutBtn'],
-  ];
-  pairs.forEach(([deskId, drawId])=>{
-    const desk = document.getElementById(deskId);
-    const draw = document.getElementById(drawId);
-    if(desk && draw) draw.style.display = desk.style.display === 'none' ? 'none' : '';
-  });
-}
-// Ferme le drawer si on tourne l'écran ou redimensionne vers desktop
-window.addEventListener('resize', ()=>{ if(window.innerWidth > 767) closeMobileMenu(); });
-// Patch applyRoleUI pour synchroniser le drawer aussi
-const _origApplyRoleUIMobile = window.applyRoleUI;
-window.applyRoleUI = function(){
-  _origApplyRoleUIMobile && _origApplyRoleUIMobile();
+  if(window.innerWidth > 767) closeMobileMenu();
   syncDrawerButtons();
-};
 </script>
 
 </body>
